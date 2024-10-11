@@ -15,18 +15,18 @@ np.set_printoptions(linewidth=201)
 class sineTest:
     def __init__(self) -> None:
         self.dataSet: torch.Tensor
-        self.encoder: self.sineCoder = self.sineCoder(inDim=2, outDim=4)
-        self.decoder: self.sineCoder = self.sineCoder(inDim=4, outDim=2)
+        self.encoder: self.sineCoder = self.sineCoder(inDim=2, outDim=2)
+        self.decoder: self.sineCoder = self.sineCoder(inDim=2, outDim=2)
         self.KMEAN: self.autoCluster
         self.parameter: torch.Tensor
         self.output: torch.Tensor
 
-    def generateData(self, k: int = 3, num: int = 100) -> None:
+    def generateData(self, k: int = 1, num: int = 100, SHf: int = 0) -> None:
         print("generating data")
         dataList: list[torch.Tensor] = []
         for _ in range(k):
-            X = torch.rand(num) * 10
-            dataList.append(torch.stack([X, torch.sin(X) + 1 * _ + 10], dim=1))
+            X = torch.rand(num * (_ + 1) ** 2) * 10
+            dataList.append(torch.stack([X, torch.sin(X) + 2 * _ + SHf], dim=1))
         self.dataSet = torch.concatenate(dataList)
         print("generating done")
 
@@ -55,24 +55,24 @@ class sineTest:
         plt.style.use("ggplot")
         fig, (ax1) = plt.subplots(1, 1, figsize=(6, 6))
         ax1.plot(
-            self.output.detach().numpy()[0 * 100 : (0 + 1) * 100, 0],
-            self.output.detach().numpy()[0 * 100 : (0 + 1) * 100, 1],
+            self.output.detach().numpy()[0:30, 0],
+            self.output.detach().numpy()[0:30, 1],
             linestyle="none",
             marker="o",
             label="Y",
             c="yellow",
         )
         ax1.plot(
-            self.output.detach().numpy()[1 * 100 : (1 + 1) * 100, 0],
-            self.output.detach().numpy()[1 * 100 : (1 + 1) * 100, 1],
+            self.output.detach().numpy()[30 : (30 + 120), 0],
+            self.output.detach().numpy()[30 : (30 + 120), 1],
             linestyle="none",
             marker="o",
             label="Y",
             c="blue",
         )
         ax1.plot(
-            self.output.detach().numpy()[2 * 100 : (2 + 1) * 100, 0],
-            self.output.detach().numpy()[2 * 100 : (2 + 1) * 100, 1],
+            self.output.detach().numpy()[(30 + 120) : ((30 + 120) + 270), 0],
+            self.output.detach().numpy()[(30 + 120) : ((30 + 120) + 270), 1],
             linestyle="none",
             marker="o",
             label="Y",
@@ -93,8 +93,8 @@ class sineTest:
         plt.style.use("ggplot")
         fig, (ax1) = plt.subplots(1, 1, figsize=(6, 6))
         ax1.plot(
-            self.parameter.detach().numpy()[0 * 100 : (0 + 1) * 100, 0],
-            self.parameter.detach().numpy()[0 * 100 : (0 + 1) * 100, 1],
+            self.parameter.detach().numpy()[0:30, 0],
+            self.parameter.detach().numpy()[0:30, 1],
             linestyle="none",
             marker="o",
             label="Y",
@@ -109,14 +109,14 @@ class sineTest:
         #     label="Y",
         #     c="yellow",
         # )
-        ax1.plot(
-            self.parameter.detach().numpy()[1 * 100 : (1 + 1) * 100, 0],
-            self.parameter.detach().numpy()[1 * 100 : (1 + 1) * 100, 1],
-            linestyle="none",
-            marker="o",
-            label="Y",
-            c="blue",
-        )
+        # ax1.plot(
+        #     self.parameter.detach().numpy()[30 : (30 + 120), 0],
+        #     self.parameter.detach().numpy()[30 : (30 + 120), 0],
+        #     linestyle="none",
+        #     marker="o",
+        #     label="Y",
+        #     c="blue",
+        # )
         # ax1.plot(
         #     self.parameter.detach().numpy()[1 * 100 : (1 + 1) * 100, 0],
         #     np.ones_like(self.parameter.detach().numpy()[0 * 100 : (0 + 1) * 100, 0])
@@ -126,14 +126,14 @@ class sineTest:
         #     label="Y",
         #     c="blue",
         # )
-        ax1.plot(
-            self.parameter.detach().numpy()[2 * 100 : (2 + 1) * 100, 0],
-            self.parameter.detach().numpy()[2 * 100 : (2 + 1) * 100, 1],
-            linestyle="none",
-            marker="o",
-            label="Y",
-            c="green",
-        )
+        # ax1.plot(
+        #     self.parameter.detach().numpy()[(30 + 120) : ((30 + 120) + 270), 0],
+        #     self.parameter.detach().numpy()[(30 + 120) : ((30 + 120) + 270), 0],
+        #     linestyle="none",
+        #     marker="o",
+        #     label="Y",
+        #     c="green",
+        # )
         # ax1.plot(
         #     self.parameter.detach().numpy()[2 * 100 : (2 + 1) * 100, 0],
         #     np.ones_like(self.parameter.detach().numpy()[0 * 100 : (0 + 1) * 100, 0])
@@ -148,6 +148,8 @@ class sineTest:
         # ax1.axis("equal")
         ax1.legend()
         plt.savefig(f"fig/sine/drawParameter/{num}.png")
+        ax1.axis("equal")
+        plt.savefig(f"fig/sine/drawParameter/{num}equ.png")
         # plt.show()
         print("draw done")
         plt.close()
@@ -167,11 +169,12 @@ class sineTest:
         # # ax.set_xlim([0, 10])
         # # ax.set_ylim([0, 10])
         print(P.shape)
-        ax1.scatter(P[:, 0], P[:, 1])
+        ax1.scatter(P[:, 0], P[:, 0])
         for i in range(self.parameter.shape[0]):
             ax1.scatter(self.parameter[i, 0], self.parameter[i, 1], c=col[Wei[i]])
-        # ax1.axis("equal")
         fig.savefig(f"fig/sine/P/{num}.png")
+        ax1.axis("equal")
+        fig.savefig(f"fig/sine/P/{num}equ.png")
         # print(self.KMEAN.FUN(self.KMEAN.pointWeight), L, Wei, sep="\n")
         # for _ in range(3):
         #     ax.add_artist(plt.Circle(P[_], L[_] / Wei[_], fill=False, color="black"))
@@ -190,7 +193,7 @@ class sineTest:
                 OrderedDict(
                     [
                         ("inputLinear", nn.Linear(inDim, hidDim)),
-                        ("inputActivation", nn.Sigmoid()),
+                        ("inputActivation", nn.Softplus()),
                     ]
                 )
             )
@@ -216,14 +219,14 @@ class sineTest:
                 OrderedDict(
                     [
                         ("outputLinear", nn.Linear(hidDim, outDim)),
-                        ("outputActivation", nn.Softplus()),
+                        # ("outputActivation", nn.Softplus()),
                     ]
                 )
             )
 
         def forward(self, x):
             x = self.ipl(x)
-            x = x * 2 - 1
+            # x = x * 2 - 1
             x = self.hpl(x)
             x = self.opl(x)
             # x = torch.einsum("ij,pj->pi", self.scale, x)
@@ -238,10 +241,11 @@ class sineTest:
             self.k = k
             self.pointWeight = nn.Parameter(torch.randn([x.shape[0], k]))
             self.FUN = nn.Softmax(dim=-1)
-            self.pointPose = nn.Parameter(
-                torch.stack([torch.mean(x, dim=0) for _ in range(k)])
-            )
-            # print(self.pointPose, self.pointWeight)
+            self.pointPose = torch.stack([torch.zeros_like(x[0]) for _ in range(k)])
+            for _ in range(k):
+                self.pointPose[_][0] = _ * 2
+
+            print(self.pointPose, self.pointWeight)
 
         def forward(self, x):
             D = torch.stack(
@@ -253,14 +257,14 @@ class sineTest:
             # Wei = torch.sum(self.FUN(self.pointWeight), dim=0)
             imd = torch.einsum("ij,ij->ij", D, W)
             sum = torch.sum(imd, dim=0)
-            # print(sum, imd)
+            # print(sum)
             return sum
 
     def parametrize(self, N: int = 10000) -> None:
         encoderOptimizer: optim.Adam = optim.Adam(self.encoder.parameters(), lr=0.001)
         decoderOptimizer: optim.Adam = optim.Adam(self.decoder.parameters(), lr=0.001)
         criterion = nn.MSELoss()
-        while criterion(OUT, self.dataSet) > 1e-6:
+        for zz in range(N):
             encoderOptimizer.zero_grad()
             decoderOptimizer.zero_grad()
 
@@ -272,11 +276,11 @@ class sineTest:
 
             encoderOptimizer.step()
             decoderOptimizer.step()
-        self.parameter = self.encoder(self.dataSet).detach().numpy()
+        self.parameter = self.encoder(self.dataSet)
 
-    def parametrizeWithCluster(self, N: int = 10000, k: int = 3) -> None:
+    def parametrizeWithCluster(self, N: int = 10000, k: int = 1) -> None:
         P = self.encoder(self.dataSet)
-        self.KMEAN = self.autoCluster(P, k)
+        self.KMEAN = self.autoCluster(P[:, 0:1], k)
         encoderOptimizer: optim.Adam = optim.Adam(self.encoder.parameters(), lr=0.001)
         decoderOptimizer: optim.Adam = optim.Adam(self.decoder.parameters(), lr=0.001)
         KMEANOptimizer: optim.Adam = optim.Adam(self.KMEAN.parameters(), lr=0.001)
@@ -284,10 +288,10 @@ class sineTest:
         _ = 1
         CT = 100
         # st = False
-        while CT > 1e-6:
+        for zz in range(N):
             encoderOptimizer.zero_grad()
             decoderOptimizer.zero_grad()
-            # KMEANOptimizer.zero_grad()
+            KMEANOptimizer.zero_grad()
 
             P = self.encoder(self.dataSet)
             # XSCALE = torch.max(P[:, 0]) - torch.min(P[:, 0])
@@ -295,34 +299,38 @@ class sineTest:
             #     torch.kthvalue(P[:, 1], int(len(P[:, 1]) * 0.75)).values
             #     - torch.kthvalue(P[:, 1], int(len(P[:, 1]) * 0.25)).values
             # )
-            # ans = torch.sum(self.KMEAN(P[:, -1:]))
+            SU = self.KMEAN(P[:, 0:1])
+            # SK = torch.sum(self.KMEAN.FUN(self.KMEAN.pointWeight), dim=0)
+            # print(SU, SK)
+            # SN = torch.einsum("i,i->i", SU, SK)
+            ans = torch.sum(SU)
             OUT = self.decoder(P)
             CT = criterion(OUT, self.dataSet)
-            Loss: torch.Tensor = CT
+            Loss: torch.Tensor = CT - 0.1 * ans
             # if ans < 5e-5 and CT < 5e-5:
             #     break
-            if CT < 5e-4:
-                #     st = True
-                # if st:
-                i = 1
-                while True:
-                    KMEANOptimizer.zero_grad()
-                    encoderOptimizer.zero_grad()
-                    decoderOptimizer.zero_grad()
-                    P = self.encoder(self.dataSet)
-                    OUT = self.decoder(P)
-                    CT = criterion(OUT, self.dataSet)
-                    ans = torch.sum(self.KMEAN(P))
-                    Loss = ans
-                    Loss.backward()
-                    print("i", i, ans)
-                    if ans < 5e-4:
-                        break
-                    KMEANOptimizer.step()
-                    encoderOptimizer.step()
-                    decoderOptimizer.step()
-                    i += 1
-                continue
+            # if CT < 5e-4:
+            #     #     st = True
+            #     # if st:
+            #     i = 1
+            #     while True:
+            #         KMEANOptimizer.zero_grad()
+            #         encoderOptimizer.zero_grad()
+            #         decoderOptimizer.zero_grad()
+            #         P = self.encoder(self.dataSet)
+            #         OUT = self.decoder(P)
+            #         CT = criterion(OUT, self.dataSet)
+            #         ans = torch.sum(self.KMEAN(P))
+            #         Loss = ans
+            #         Loss.backward()
+            #         print("i", i, ans)
+            #         if ans < 5e-4:
+            #             break
+            #         KMEANOptimizer.step()
+            #         encoderOptimizer.step()
+            #         decoderOptimizer.step()
+            #         i += 1
+            #     continue
             # print(_, Loss, CT)
             Loss.backward()
             if _ % 1000 == 0:
@@ -335,7 +343,7 @@ class sineTest:
                 self.drawParameter(_)
                 self.drawOutput(_)
 
-            # KMEANOptimizer.step()
+            KMEANOptimizer.step()
             encoderOptimizer.step()
             decoderOptimizer.step()
             _ += 1
@@ -345,9 +353,19 @@ class sineTest:
 
 if __name__ == "__main__":
     test1 = sineTest()
-    test1.generateData()
+    test1.generateData(SHf=0)
     test1.drawData()
     # test1.parametrize()
     # test1.drawParameter(1)
     test1.parametrizeWithCluster()
     test1.drawParameter(2)
+
+    test1.generateData(SHf=5)
+    test1.drawData()
+    test1.parametrize(1)
+    test1.drawParameter(3)
+
+    test1.generateData(SHf=-5)
+    test1.drawData()
+    test1.parametrize(1)
+    test1.drawParameter(4)
