@@ -10,6 +10,7 @@ import sklearn
 import numpy as np
 import pandas as pd
 from sklearn.datasets import fetch_openml
+from sklearn.decomposition import PCA
 
 np.random.seed(0)
 
@@ -17,6 +18,7 @@ np.random.seed(0)
 class test_field:
     def __init__(self):
         self.dataSet: torch.Tensor
+        self.lableSet: torch.Tensor
 
     def gene_data_circle_uniform(
         self, dimension: int = 2, k: int = 3, each_N: int = 100
@@ -54,13 +56,90 @@ class test_field:
 
     def get_data_MNIST(self) -> None:
         X, y = fetch_openml("mnist_784", return_X_y=True)
-        print(X)
+        # Convert data to image pixel-by-pixel representation
+        X_images = X.to_numpy().reshape(X.shape[0], 28, 28)
+
+        # Flatten the data so that we can apply clustering
+        X = X_images.reshape(X.shape[0], -1)
+        y = y.astype(int).to_numpy()
+        print(X, y, sep="\n")
+        print(X.shape, y.shape, sep="\n")
+        self.dataSet = X
+        self.lableSet = y
+        pass
+
+    def draw_2D(self, data: torch.Tensor, name: str) -> None:
+        print("draw data")
+        plt.style.use("ggplot")
+        fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
+        ax1.plot(
+            data[:, 0],
+            data[:, 1],
+            linestyle="none",
+            marker="o",
+            label="Y",
+        )
+        ax1.set_xlabel("X")
+        ax1.set_ylabel("Y")
+        ax1.axis("equal")
+        ax1.legend()
+        plt.savefig(f"fig/draw_2D_{name}")
+        print("draw done")
+        plt.close()
+        pass
+
+    def draw_2D_MNIST(self, data: torch.Tensor, label: torch.Tensor, name: str) -> None:
+        colors = [
+            "blue",
+            "orange",
+            "green",
+            "red",
+            "purple",
+            "brown",
+            "pink",
+            "gray",
+            "olive",
+            "cyan",
+        ]
+        markers = [
+            "+",
+            "-",
+            "o",
+            "s",
+            "^",
+            "*",
+            "%",
+            "$",
+            "#",
+            "@",
+        ]
+        print("draw data")
+        plt.style.use("ggplot")
+        fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
+        ax1.scatter(
+            data[:, 0],
+            data[:, 1],
+            c=[colors[label[i]] for i in range(len(label))],
+        )
+        ax1.set_xlabel("X")
+        ax1.set_ylabel("Y")
+        ax1.axis("equal")
+        ax1.legend()
+        plt.savefig(f"fig/draw_2D_MNIST_{name}")
+        print("draw done")
+        plt.close()
+        pass
+
+    def compute_pca(self, dim: int) -> None:
+        pca = PCA(n_components=dim)
+        pca.fit(self.dataSet)
+        self.dataSet = pca.fit_transform(self.dataSet)
         pass
 
 
 if __name__ == "__main__":
     # loading the data into objc
-    print("processing")
+    print("loading")
     objc = None
     # get current file path and the folder path
     current_file_path = os.path.abspath(__file__)
@@ -78,13 +157,16 @@ if __name__ == "__main__":
         with open(datumst_file_path, "wb") as pkl_file:
             pickle.dump(objc, pkl_file)
         print("creating done")
-    print("processing done")
+    print("load done")
     assert objc != None
 
     # sd
 
-    objc.gene_data_circle_uniform()
-    objc.draw_data_circle()
+    objc.get_data_MNIST()
+    objc.draw_2D_MNIST(objc.dataSet[:, 0:2], objc.lableSet, "[0,1]")
+
+    objc.compute_pca(2)
+    objc.draw_2D_MNIST(objc.dataSet[:, 0:2], objc.lableSet, "[pca]")
 
     # sd
 
