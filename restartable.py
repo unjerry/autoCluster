@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 np.random.seed(0)
+UniDevice = "cuda"
 
 
 class test_field:
@@ -197,10 +198,18 @@ class test_field:
         nj: int = self.dataSet.shape[0]
         ni: int = self.dataSet.shape[1]
         # print(f"[nj,ni]={nj,ni}")
-        Xji = self.dataSet  # [j,i]<[N,2]
-        Ejsi: torch.Tensor = torch.zeros([nj, S, ni])  # [j,k,i]<[N,S,2]
-        nbrs = NearestNeighbors(n_neighbors=1 + K, algorithm="ball_tree").fit(Xji)
-        distances, indices = nbrs.kneighbors(Xji)
+        Xji = self.dataSet.to(UniDevice)  # [j,i]<[N,2]
+        Ejsi: torch.Tensor = torch.zeros(
+            [nj, S, ni], device=UniDevice
+        )  # [j,k,i]<[N,S,2]
+        nbrs = NearestNeighbors(n_neighbors=1 + K, algorithm="ball_tree").fit(
+            Xji.to("cpu")
+        )
+        distances, indices = nbrs.kneighbors(Xji.to("cpu"))
+        # print("IND", indices, distances)
+        # print("SHAPE", distances.shape)
+        RHOjk = torch.tensor(distances)
+        # print("RHO", rho)
         for j in range(nj):
             pca.fit(torch.index_select(self.dataSet, 0, torch.tensor(indices[j])))
             Ejsi[j] = torch.tensor(pca.components_)
@@ -212,10 +221,10 @@ class test_field:
         plt.style.use("ggplot")
         fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
         ax1.quiver(
-            self.dataSet[:, 0],
-            self.dataSet[:, 1],
-            Ejsi[:, :, 0],
-            Ejsi[:, :, 1],
+            self.dataSet[:, 0].to("cpu"),
+            self.dataSet[:, 1].to("cpu"),
+            Ejsi[:, :, 0].to("cpu"),
+            Ejsi[:, :, 1].to("cpu"),
             angles="xy",
             scale_units="xy",
             minlength=1,
@@ -244,7 +253,7 @@ class test_field:
             tjs = self.f_inv(Xji)
             Jjis = vmap(jacrev(self.f))(tjs)
             Yji = self.f(tjs)
-            L = criterion(Xji, Yji) + 0.1 * criterion(Ejis, Jjis)
+            L = 0.1 * criterion(Xji, Yji) + criterion(Ejis, Jjis)
             L.backward()
             # print("iter:", _, L)
 
@@ -305,9 +314,9 @@ if __name__ == "__main__":
                 epoch = 1
                 while True:
                     print("data_shape", objc.dataSet.shape)
-                    # objc.dataSet.to("cuda")
-                    # objc.f.to("cuda")
-                    # objc.f_inv.to("cuda")
+                    objc.dataSet.to(UniDevice)
+                    objc.f.to(UniDevice)
+                    objc.f_inv.to(UniDevice)
                     objc.draw_2D(objc.dataSet[:, 0:2], "_[0,1]")
                     # for _ in objc.f.parameters():
                     #     print(_)
@@ -322,25 +331,25 @@ if __name__ == "__main__":
                         pickle.dump(objc, pkl_file)
                     print("save done", epoch)
 
-                    objc.draw_2D(objc.dataSet.detach().numpy(), f"xi{epoch}")
+                    objc.draw_2D(objc.dataSet.to("cpu").detach().numpy(), f"xi{epoch}")
 
-                    t = objc.f_inv(objc.dataSet)
-                    objc.draw_1D(t.detach().numpy(), f"ts{epoch}")
+                    t = objc.f_inv(objc.dataSet.to(UniDevice))
+                    objc.draw_1D(t.to("cpu").detach().numpy(), f"ts{epoch}")
 
                     y = objc.f(t)
-                    objc.draw_2D(y.detach().numpy(), f"yi{epoch}")
+                    objc.draw_2D(y.to("cpu").detach().numpy(), f"yi{epoch}")
 
-                    x = objc.f_inv(objc.dataSet)
+                    x = objc.f_inv(objc.dataSet.to(UniDevice))
                     Jjis = vmap(jacrev(objc.f))(x)
                     assert Jjis.shape == (1400, 2, 1)
                     print("localPCAtask train draw")
                     plt.style.use("ggplot")
                     fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
                     ax1.quiver(
-                        objc.dataSet[:, 0].detach().numpy(),
-                        objc.dataSet[:, 1].detach().numpy(),
-                        Jjis[:, 0, :].detach().numpy(),
-                        Jjis[:, 1, :].detach().numpy(),
+                        objc.dataSet[:, 0].to("cpu").detach().numpy(),
+                        objc.dataSet[:, 1].to("cpu").detach().numpy(),
+                        Jjis[:, 0, :].to("cpu").detach().numpy(),
+                        Jjis[:, 1, :].to("cpu").detach().numpy(),
                         angles="xy",
                         scale_units="xy",
                         minlength=1,
@@ -359,6 +368,7 @@ if __name__ == "__main__":
                 objc.f = objc.FCN(1, 2, 64, 8)
                 objc.f_inv = objc.FCN(2, 1, 64, 8)
                 objc.compute_pca(2)
+                objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
 
