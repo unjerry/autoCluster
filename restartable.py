@@ -11,14 +11,20 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets import fetch_openml
 from sklearn.decomposition import PCA
+from sklearn.neighbors import NearestNeighbors
+from torch.func import jacrev, vmap
+import torch.nn as nn
+import torch.optim as optim
 
 np.random.seed(0)
 
 
 class test_field:
     def __init__(self):
-        self.dataSet: torch.Tensor
-        self.lableSet: torch.Tensor
+        self.dataSet: torch.Tensor = None
+        self.lableSet: torch.Tensor = None
+        self.f = None
+        self.f_inv = None
 
     def gene_data_circle_uniform(
         self, dimension: int = 2, k: int = 3, each_N: int = 100
@@ -34,6 +40,15 @@ class test_field:
             lis.append(torch.stack([z.real, z.imag], dim=1))
         self.dataSet = torch.concatenate(lis, dim=0)
         print("centers", centers, radiuss, self.dataSet, sep="\n")
+
+    def gene_data_sine_uniform(self, k: int = 1, num: int = 100, SHf: int = 0) -> None:
+        print("generating sine data")
+        dataList: list[torch.Tensor] = []
+        for _ in range(k):
+            X = torch.rand(num * (_ + 1) ** 2) * 10
+            dataList.append(torch.stack([X, torch.sin(X) + 2 * _ + SHf], dim=1))
+        self.dataSet = torch.concatenate(dataList)
+        print("generating done")
 
     def draw_data_circle(self) -> None:
         print("draw data")
@@ -75,6 +90,26 @@ class test_field:
         ax1.plot(
             data[:, 0],
             data[:, 1],
+            linestyle="none",
+            marker="o",
+            label="Y",
+        )
+        ax1.set_xlabel("X")
+        ax1.set_ylabel("Y")
+        ax1.axis("equal")
+        ax1.legend()
+        plt.savefig(f"fig/draw_2D_{name}")
+        print("draw done")
+        plt.close()
+        pass
+
+    def draw_1D(self, data: torch.Tensor, name: str) -> None:
+        print("draw data")
+        plt.style.use("ggplot")
+        fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
+        ax1.plot(
+            data[:, 0],
+            np.zeros_like(data[:, 0]),
             linestyle="none",
             marker="o",
             label="Y",
@@ -136,6 +171,89 @@ class test_field:
         self.dataSet = pca.fit_transform(self.dataSet)
         pass
 
+    class FCN(nn.Module):
+        "define a fully connected network"
+
+        def __init__(self, N_INPUT, N_OUTPUT, N_HIDDEN, N_LAYERS):
+            super().__init__()
+            activation = nn.Tanh
+            self.fcs = nn.Sequential(*[nn.Linear(N_INPUT, N_HIDDEN), activation()])
+            self.fch = nn.Sequential(
+                *[
+                    nn.Sequential(*[nn.Linear(N_HIDDEN, N_HIDDEN), activation()])
+                    for _ in range(N_LAYERS)
+                ]
+            )
+            self.fce = nn.Linear(N_HIDDEN, N_OUTPUT)
+
+        def forward(self, x):
+            x = self.fcs(x)
+            x = self.fch(x)
+            x = self.fce(x)
+            return x
+
+    def localPCAtask(self, K: int, S: int) -> None:
+        pca = PCA(n_components=S)
+        nj: int = self.dataSet.shape[0]
+        ni: int = self.dataSet.shape[1]
+        # print(f"[nj,ni]={nj,ni}")
+        Xji = self.dataSet  # [j,i]<[N,2]
+        Ejsi: torch.Tensor = torch.zeros([nj, S, ni])  # [j,k,i]<[N,S,2]
+        nbrs = NearestNeighbors(n_neighbors=1 + K, algorithm="ball_tree").fit(Xji)
+        distances, indices = nbrs.kneighbors(Xji)
+        for j in range(nj):
+            pca.fit(torch.index_select(self.dataSet, 0, torch.tensor(indices[j])))
+            Ejsi[j] = torch.tensor(pca.components_)
+        # print("Xji,Ejsi", Xji, Ejsi, Xji.shape, Ejsi.shape, sep="\n")
+        Ejis = torch.einsum("jsi->jis", Ejsi)
+        assert Ejis.shape == (1400, 2, 1)
+
+        print("localPCAtask draw")
+        plt.style.use("ggplot")
+        fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
+        ax1.quiver(
+            self.dataSet[:, 0],
+            self.dataSet[:, 1],
+            Ejsi[:, :, 0],
+            Ejsi[:, :, 1],
+            angles="xy",
+            scale_units="xy",
+            minlength=1,
+            scale=1,
+        )
+        ax1.set_xlabel("X")
+        ax1.set_ylabel("Y")
+        ax1.axis("equal")
+        plt.savefig(f"fig/localPCAtask_draw_quver")
+        print("done draw")
+        plt.close()
+
+        x = self.f_inv(Xji)
+        Jjis = vmap(jacrev(self.f))(x)
+        assert Jjis.shape == (1400, 2, 1)
+
+        # train
+        fOptimizer: optim.Adam = optim.Adam(self.f.parameters(), lr=0.001)
+        f_invOptimizer: optim.Adam = optim.Adam(self.f_inv.parameters(), lr=0.001)
+        criterion = nn.MSELoss()
+        L = None
+        for _ in range(1000):
+            fOptimizer.zero_grad()
+            f_invOptimizer.zero_grad()
+
+            tjs = self.f_inv(Xji)
+            Jjis = vmap(jacrev(self.f))(tjs)
+            Yji = self.f(tjs)
+            L = criterion(Xji, Yji) + 0.1 * criterion(Ejis, Jjis)
+            L.backward()
+            # print("iter:", _, L)
+
+            fOptimizer.step()
+            f_invOptimizer.step()
+            pass
+        print("loss", L)
+        pass
+
 
 if __name__ == "__main__":
     # loading the data into objc
@@ -162,21 +280,15 @@ if __name__ == "__main__":
 
     # sd
 
-    objc.get_data_MNIST()
-    objc.draw_2D_MNIST(objc.dataSet[:, 0:2], objc.lableSet, "[0,1]")
-
-    objc.compute_pca(2)
-    objc.draw_2D_MNIST(objc.dataSet[:, 0:2], objc.lableSet, "[pca]")
-
     # sd
 
     print("running")
     print("sys.argv", sys.argv)
-    short_options = "ho:v"
-    long_options = ["help", "output=", "verbose"]
+    short_options = "ho:vt:"
+    long_options = ["help", "output=", "verbose", "train="]
     try:
         # 解析命令行参数
-        args, values = getopt.getopt(sys.argv[1:], "ho:", ["help", "output="])
+        args, values = getopt.getopt(sys.argv[1:], short_options, long_options)
     except getopt.GetoptError as err:
         print("ERROR:", str(err))  # 打印错误信息
         sys.exit(2)
@@ -188,6 +300,67 @@ if __name__ == "__main__":
             print("output dir:", arg)
         elif opt == "-v":
             print("I don't know what is this.")
+        elif opt in ("-t", "--train"):
+            if arg == "localPCAtrain":
+                epoch = 1
+                while True:
+                    print("data_shape", objc.dataSet.shape)
+                    # objc.dataSet.to("cuda")
+                    # objc.f.to("cuda")
+                    # objc.f_inv.to("cuda")
+                    objc.draw_2D(objc.dataSet[:, 0:2], "_[0,1]")
+                    # for _ in objc.f.parameters():
+                    #     print(_)
+                    # input("press arbitary key to continue")
+                    print("running", epoch)
+                    objc.localPCAtask(5, 1)
+                    # print(objc.f.parameters())
+                    # for _ in objc.f.parameters():
+                    #     print(_)
+
+                    with open(datumst_file_path, "wb") as pkl_file:
+                        pickle.dump(objc, pkl_file)
+                    print("save done", epoch)
+
+                    objc.draw_2D(objc.dataSet.detach().numpy(), f"xi{epoch}")
+
+                    t = objc.f_inv(objc.dataSet)
+                    objc.draw_1D(t.detach().numpy(), f"ts{epoch}")
+
+                    y = objc.f(t)
+                    objc.draw_2D(y.detach().numpy(), f"yi{epoch}")
+
+                    x = objc.f_inv(objc.dataSet)
+                    Jjis = vmap(jacrev(objc.f))(x)
+                    assert Jjis.shape == (1400, 2, 1)
+                    print("localPCAtask train draw")
+                    plt.style.use("ggplot")
+                    fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
+                    ax1.quiver(
+                        objc.dataSet[:, 0].detach().numpy(),
+                        objc.dataSet[:, 1].detach().numpy(),
+                        Jjis[:, 0, :].detach().numpy(),
+                        Jjis[:, 1, :].detach().numpy(),
+                        angles="xy",
+                        scale_units="xy",
+                        minlength=1,
+                        scale=1,
+                    )
+                    ax1.set_xlabel("X")
+                    ax1.set_ylabel("Y")
+                    ax1.axis("equal")
+                    plt.savefig(f"fig/localPCAtask_draw_train_quver{epoch}")
+                    print("done draw")
+                    plt.close()
+
+                    epoch += 1
+            elif arg == "localPCASetup":
+                objc.gene_data_sine_uniform(3, 100, 5)
+                objc.f = objc.FCN(1, 2, 64, 8)
+                objc.f_inv = objc.FCN(2, 1, 64, 8)
+                objc.compute_pca(2)
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
 
     for value in values:
         if value == "regenerate":
