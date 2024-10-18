@@ -26,6 +26,8 @@ class test_field:
         self.lableSet: torch.Tensor = None
         self.f = None
         self.f_inv = None
+        self.fOptimizer = None
+        self.f_invOptimizer = None
 
     def gene_data_circle_uniform(
         self, dimension: int = 2, k: int = 3, each_N: int = 100
@@ -193,6 +195,16 @@ class test_field:
             x = self.fce(x)
             return x
 
+    def localDis(self, P: torch.Tensor, Q: torch.Tensor):
+        return torch.dist(P, Q)
+
+    def localPCAIndexDis(self, A: torch.Tensor, I: torch.Tensor, Q: torch.Tensor):
+        P = torch.index_select(A, 0, I)
+        # print("SHAPE", Q.shape, P.shape)
+        assert P.shape == (5, 1)
+        assert Q.shape == (1,)
+        return vmap(self.localDis, in_dims=(0, None))(P, Q)
+
     def localPCAtask(self, K: int, S: int) -> None:
         pca = PCA(n_components=S)
         nj: int = self.dataSet.shape[0]
@@ -208,14 +220,15 @@ class test_field:
         distances, indices = nbrs.kneighbors(Xji.to("cpu"))
         # print("IND", indices, distances)
         # print("SHAPE", distances.shape)
-        RHOjk = torch.tensor(distances)
+        RHOjk = torch.tensor(distances, dtype=torch.float32).to(UniDevice)[:, 1:]
+        Ijk = torch.tensor(indices).to(UniDevice)[:, 1:]
         # print("RHO", rho)
         for j in range(nj):
             pca.fit(torch.index_select(self.dataSet, 0, torch.tensor(indices[j])))
             Ejsi[j] = torch.tensor(pca.components_)
         # print("Xji,Ejsi", Xji, Ejsi, Xji.shape, Ejsi.shape, sep="\n")
         Ejis = torch.einsum("jsi->jis", Ejsi)
-        assert Ejis.shape == (1400, 2, 1)
+        assert Ejis.shape == (100, 2, 1)
 
         print("localPCAtask draw")
         plt.style.use("ggplot")
@@ -239,26 +252,37 @@ class test_field:
 
         x = self.f_inv(Xji)
         Jjis = vmap(jacrev(self.f))(x)
-        assert Jjis.shape == (1400, 2, 1)
+        assert Jjis.shape == (100, 2, 1)
 
         # train
-        fOptimizer: optim.Adam = optim.Adam(self.f.parameters(), lr=0.001)
-        f_invOptimizer: optim.Adam = optim.Adam(self.f_inv.parameters(), lr=0.001)
         criterion = nn.MSELoss()
         L = None
         for _ in range(1000):
-            fOptimizer.zero_grad()
-            f_invOptimizer.zero_grad()
+            self.fOptimizer.zero_grad()
+            self.f_invOptimizer.zero_grad()
 
-            tjs = self.f_inv(Xji)
+            tjs: torch.Tensor = self.f_inv(Xji)
+            SIGMjk = vmap(self.localPCAIndexDis, in_dims=(None, 0, 0))(
+                tjs,
+                Ijk,
+                tjs,
+            )
             Jjis = vmap(jacrev(self.f))(tjs)
             Yji = self.f(tjs)
-            L = 0.1 * criterion(Xji, Yji) + criterion(Ejis, Jjis)
+            assert SIGMjk.shape == (100, 5)
+            assert RHOjk.shape == (100, 5)
+            # with torch.no_grad():
+            #     print(tjs[0:10, :], SIGMjk.to("cpu")[0:10, :], RHOjk.to("cpu")[0:10, :])
+            L = (
+                +1.0 * criterion(Xji, Yji)
+                + 1.0 * criterion(Ejis, Jjis)
+                + 0.5 * criterion(SIGMjk, RHOjk)
+            )
             L.backward()
-            # print("iter:", _, L)
+            print("iter:", _, L)
 
-            fOptimizer.step()
-            f_invOptimizer.step()
+            self.fOptimizer.step()
+            self.f_invOptimizer.step()
             pass
         print("loss", L)
         pass
@@ -312,11 +336,11 @@ if __name__ == "__main__":
         elif opt in ("-t", "--train"):
             if arg == "localPCAtrain":
                 epoch = 1
+                objc.dataSet.to(UniDevice)
+                objc.f.to(UniDevice)
+                objc.f_inv.to(UniDevice)
                 while True:
                     print("data_shape", objc.dataSet.shape)
-                    objc.dataSet.to(UniDevice)
-                    objc.f.to(UniDevice)
-                    objc.f_inv.to(UniDevice)
                     objc.draw_2D(objc.dataSet[:, 0:2], "_[0,1]")
                     # for _ in objc.f.parameters():
                     #     print(_)
@@ -332,8 +356,23 @@ if __name__ == "__main__":
                     print("save done", epoch)
 
                     objc.draw_2D(objc.dataSet.to("cpu").detach().numpy(), f"xi{epoch}")
-
                     t = objc.f_inv(objc.dataSet.to(UniDevice))
+                    print(torch.min(t).tolist(), torch.max(t).tolist())
+                    objc.draw_2D(
+                        objc.f(
+                            torch.range(
+                                torch.min(t).tolist() * 2,
+                                torch.max(t).tolist() * 2,
+                                0.001,
+                            )
+                            .to(UniDevice)
+                            .view(-1, 1)
+                        )
+                        .to("cpu")
+                        .detach()
+                        .numpy(),
+                        f"sm{epoch}",
+                    )
                     objc.draw_1D(t.to("cpu").detach().numpy(), f"ts{epoch}")
 
                     y = objc.f(t)
@@ -341,7 +380,7 @@ if __name__ == "__main__":
 
                     x = objc.f_inv(objc.dataSet.to(UniDevice))
                     Jjis = vmap(jacrev(objc.f))(x)
-                    assert Jjis.shape == (1400, 2, 1)
+                    assert Jjis.shape == (100, 2, 1)
                     print("localPCAtask train draw")
                     plt.style.use("ggplot")
                     fig, ax1 = plt.subplots(1, 1, figsize=(6, 6))
@@ -364,10 +403,12 @@ if __name__ == "__main__":
 
                     epoch += 1
             elif arg == "localPCASetup":
-                objc.gene_data_sine_uniform(3, 100, 5)
-                objc.f = objc.FCN(1, 2, 64, 8)
-                objc.f_inv = objc.FCN(2, 1, 64, 8)
-                objc.compute_pca(2)
+                objc.gene_data_sine_uniform(1, 100, 5)
+                objc.f = objc.FCN(1, 2, 64, 2)
+                objc.f_inv = objc.FCN(2, 1, 64, 2)
+                objc.fOptimizer = optim.Adam(objc.f.parameters(), lr=0.0001)
+                objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
+                # objc.compute_pca(2)
                 objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
