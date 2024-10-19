@@ -218,15 +218,15 @@ class test_field:
         print("START NEAREST")
         nbrs = kdt = KDTree(Xji.to("cpu"), leaf_size=3, metric="euclidean")
         distances, indices = kdt.query(Xji.to("cpu"), k=K + 1, return_distance=True)
-        print("IND", indices, distances)
-        print("SHAPE", distances.shape)
+        # print("IND", indices, distances)
+        # print("SHAPE", distances.shape)
         RHOjk = torch.tensor(distances, dtype=torch.float32).to(UniDevice)[:, 1:]
         Ijk = torch.tensor(indices).to(UniDevice)[:, 1:]
-        print("RHO", RHOjk)
+        # print("RHO", RHOjk)
         for j in range(nj):
             pca.fit(torch.index_select(self.dataSet, 0, torch.tensor(indices[j])))
             Ejsi[j] = torch.tensor(pca.components_)
-        print("Xji,Ejsi", Xji, Ejsi, Xji.shape, Ejsi.shape, sep="\n")
+        # print("Xji,Ejsi", Xji, Ejsi, Xji.shape, Ejsi.shape, sep="\n")
         Ejis = torch.einsum("jsi->jis", Ejsi)
         assert Ejis.shape == (nj, ni, S)
 
@@ -257,6 +257,7 @@ class test_field:
         # train
         criterion = nn.MSELoss()
         L = None
+        ONEE = torch.ones(nj, S).to(UniDevice)
         for _ in range(1000):
             self.fOptimizer.zero_grad()
             self.f_invOptimizer.zero_grad()
@@ -275,8 +276,12 @@ class test_field:
             #     print(tjs[0:10, :], SIGMjk.to("cpu")[0:10, :], RHOjk.to("cpu")[0:10, :])
             L = (
                 +1.0 * criterion(Xji, Yji)
-                + 1.0 * criterion(Ejis, Jjis)
-                + 0.5 * criterion(SIGMjk, RHOjk)
+                + 0.1
+                * criterion(
+                    torch.abs(torch.einsum("jis,jis->js", Ejis, Jjis)),
+                    ONEE,
+                )
+                + 1.0 * criterion(SIGMjk, RHOjk)
             )
             L.backward()
             print("iter:", _, L)
@@ -418,7 +423,7 @@ if __name__ == "__main__":
                 objc.f_inv = objc.FCN(2, 1, 64, 2)
                 objc.fOptimizer = optim.Adam(objc.f.parameters(), lr=0.0001)
                 objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
-                # objc.compute_pca(2)
+                objc.compute_pca(2)
                 objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
