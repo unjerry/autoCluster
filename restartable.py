@@ -50,8 +50,8 @@ class test_field:
         print("generating sine data")
         dataList: list[torch.Tensor] = []
         for _ in range(k):
-            # X = torch.rand(num * (_ + 1) ** 2) * 10
-            X = torch.arange(0, 10, 0.01)
+            X = torch.rand(num * (_ + 1) ** 2) * 10
+            # X = torch.arange(0, 10, 0.01)
             dataList.append(torch.stack([X, torch.sin(X) + 2 * _ + SHf], dim=1))
         self.dataSet = torch.concatenate(dataList)
         print("generating done")
@@ -331,6 +331,21 @@ class test_field:
 
         FEAT = torch.concatenate([STPRi, d2STPRdT2i], dim=1)
         print(f"FEAT dim {FEAT.shape}")
+        ax = plt.subplot(111, projection="3d")
+        ax.scatter(
+            STPRi.to("cpu").detach().numpy(),
+            dSTPRdTi.to("cpu").detach().numpy(),
+            d2STPRdT2i.to("cpu").detach().numpy(),
+        )
+        ax.set_zlabel("Z")  # 坐标轴
+        ax.set_ylabel("Y")
+        ax.set_xlabel("X")
+        # plt.show()
+        plt.savefig(f"fig/draw_3d")
+        plt.close()
+        pca = PCA(n_components=3)
+        pca.fit(torch.concatenate([STPRi, d2STPRdT2i], dim=1).to("cpu"))
+        print(pca.components_, pca.explained_variance_, pca.singular_values_)
 
         print(f"start epoch {self.epoch}")
         criterion = nn.MSELoss()
@@ -350,6 +365,60 @@ class test_field:
             pass
         print(f"end epoch with: L {L}")
         pass
+
+    def deLinearTask(self, K: int) -> None:
+        Xi: torch.Tensor = self.dataSet.to(UniDevice)  # (s,t)i
+        X1i: torch.Tensor
+        X2i: torch.Tensor
+        ni: int = Xi.shape[0]
+        print(f"[ni]={ni}")
+        Ti: torch.Tensor = self.dataSet[:, 0:1].to(UniDevice)  # T
+        STPRi: torch.Tensor = self.dataSet[:, 1:2].to(UniDevice)  # STPR for srock_price
+        dSTPRdTi: torch.Tensor = torch.zeros([ni, 1], dtype=torch.float32).to(
+            UniDevice
+        )  # dSTPRdT for dSTPR/dT
+        d2STPRdT2i: torch.Tensor = torch.zeros([ni, 1], dtype=torch.float32).to(
+            UniDevice
+        )  # for d2STPR/dT2
+
+        pca = PCA(n_components=1)
+
+        kdt = KDTree(Xi.to("cpu"), leaf_size=5, metric="euclidean")
+        indices = kdt.query(Xi.to("cpu"), k=K + 1, return_distance=False)
+        for i in range(ni):
+            pca.fit(torch.index_select(Xi.to("cpu"), 0, torch.tensor(indices[i])))
+            dSTPRdTi[i] = torch.tensor(pca.components_[0][1] / pca.components_[0][0])
+        X1i = torch.concatenate([Ti, dSTPRdTi], dim=1)
+        print(f"X1 shape {X1i.shape}")
+        kdt = KDTree(X1i.to("cpu"), leaf_size=5, metric="euclidean")
+        indices = kdt.query(X1i.to("cpu"), k=K + 1, return_distance=False)
+        for i in range(ni):
+            pca.fit(torch.index_select(X1i.to("cpu"), 0, torch.tensor(indices[i])))
+            d2STPRdT2i[i] = torch.tensor(pca.components_[0][1] / pca.components_[0][0])
+        X2i = torch.concatenate([Ti, d2STPRdT2i], dim=1)
+
+        objc.draw_2D(Xi.to("cpu"), "_SineData")
+        objc.draw_2D(X1i.to("cpu"), "_dSineData")
+        objc.draw_2D(X2i.to("cpu"), "_d2SineData")
+
+        FEAT = torch.concatenate([STPRi, dSTPRdTi, d2STPRdT2i], dim=1)
+        print(f"FEAT dim {FEAT.shape}")
+        ax = plt.subplot(111, projection="3d")
+        ax.scatter(
+            STPRi.to("cpu").detach().numpy(),
+            dSTPRdTi.to("cpu").detach().numpy(),
+            d2STPRdT2i.to("cpu").detach().numpy(),
+        )
+        ax.set_zlabel("Z")  # 坐标轴
+        ax.set_ylabel("Y")
+        ax.set_xlabel("X")
+        # plt.show()
+        plt.savefig(f"fig/draw_3d")
+        plt.close()
+        pca = PCA(n_components=3)
+        pca.fit(torch.concatenate([STPRi, dSTPRdTi, d2STPRdT2i], dim=1).to("cpu"))
+        print(pca.components_, pca.explained_variance_, pca.singular_values_)
+        return torch.tensor(pca.components_[2], dtype=torch.float32)
 
 
 if __name__ == "__main__":
@@ -550,7 +619,7 @@ if __name__ == "__main__":
                     )
                     L.backward()
                     print(f"iter:{_} L {L}")
-                    if L < 1e-4:
+                    if L < 1e-6:
                         break
                     if _ % 1000 == 0:
                         print(f"L {L*Ti.shape[0]}")
@@ -564,6 +633,82 @@ if __name__ == "__main__":
 
                     objc.f_invOptimizer.step()
                     pass
+            elif arg == "deLinearSetup":
+                print("SETUP deLinearTasks")
+                objc.gene_data_sine_uniform(1, 500, 0)
+                # objc.compute_pca(2)
+
+                objc.f_inv = objc.FCN(1, 1, 64, 4)  # the pde solution
+                objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
+
+                objc.draw_2D(objc.dataSet[:, 0:2], "_SineData")
+
+                objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
+            elif arg == "deLinearTrain":
+                print("START deLinearTraining")
+                objc.f = objc.deLinearTask(10).to(UniDevice)
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
+            elif arg == "deLinearGenerate":
+                print("START generate")
+                Ti = torch.arange(0, 15, 0.1).to(UniDevice).view(-1, 1)
+                objc.f_inv.to(UniDevice)
+                objc.f = objc.f.to(UniDevice)
+                criterion = nn.MSELoss()
+                L = None
+                ZERO = torch.zeros_like(Ti).to(UniDevice)
+                s0 = torch.zeros([1]).to(UniDevice)
+                ds0 = torch.ones([1]).to(UniDevice) * 0.5
+                _ = 0
+                while True:
+                    _ += 1
+                    objc.f_invOptimizer.zero_grad()
+
+                    si = objc.f_inv(Ti)
+                    dsi = vmap(jacrev(objc.f_inv))(Ti).view(-1, 1)
+                    d2si = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 1)
+                    # print(si, dsi, d2si, sep="\n")
+                    FEAT = torch.concatenate([si, dsi, d2si], dim=1)
+                    # print(FEAT.shape)
+                    L = (
+                        criterion(
+                            torch.einsum("ji,i->j", FEAT, objc.f).view(-1, 1), ZERO
+                        )
+                        + 10 * criterion(si[0], s0)
+                        + 10 * criterion(dsi[0], ds0)
+                    )
+                    L.backward()
+                    print(f"iter:{_} L {L}")
+                    if L < 1e-6:
+                        break
+                    if _ % 1000 == 0:
+                        print(f"L {L*Ti.shape[0]}")
+                        X1i = torch.concatenate([Ti, si], dim=1)
+                        print(f"X1 shape {X1i.shape}")
+                        objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredData")
+                        X1i = torch.concatenate(
+                            [Ti, torch.einsum("ji,i->j", FEAT, objc.f).view(-1, 1)],
+                            dim=1,
+                        )
+                        objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredEqu")
+                        with open(datumst_file_path, "wb") as pkl_file:
+                            pickle.dump(objc, pkl_file)
+
+                    objc.f_invOptimizer.step()
+
+                print(f"L {L*Ti.shape[0]}")
+                X1i = torch.concatenate([Ti, si], dim=1)
+                print(f"X1 shape {X1i.shape}")
+                objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredData")
+                X1i = torch.concatenate(
+                    [Ti, torch.einsum("ji,i->j", FEAT, objc.f).view(-1, 1)], dim=1
+                )
+                objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredEqu")
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
+
     for value in values:
         if value == "regenerate":
             print("regenerating")
