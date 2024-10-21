@@ -1,0 +1,132 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb,amsfonts}  % For math symbols and fonts
+\usepackage{graphicx}                   % For including images
+\usepackage{hyperref}                   % For hyperlinks
+\usepackage{cite}                       % For citations
+
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% Title and author info
+\title{Differential Informed Auto-Encoder}
+\author{Zhang Jinrui\thanks{Liu Zhekai,Fu Xiangshuo} \\ \texttt{jerryzhang40@gmail.com}}
+
+\date{20241021}  % Empty date; optional, you can also specify a date here
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    In this article, an encoder was trained to obtain the inner
+    structure of the original data by obtain a differential equations.
+    A decoder was trained to resample from the domain of original data,
+    to generate new data obey the differential structure of the original
+    data using the Physics Informed Neural Network\cite[PINN]{raissi2017physics}.
+\end{abstract}
+
+\section{Introduction}
+If the physics formula was obtained in the form of differential equations,
+Physics Informed Neural network can be built to solve it numerically
+in a global scale\cite[PINN]{raissi2017physics}.This process could be view
+as a decoder in a way that it takes a sample point in the domain of
+the partial differential equations, and solve it to get all the corresponding
+output of each input point. If only a small and random amount of
+training data was obtained, to resample from the domain we need
+to obtain the differential relationship of the data. This process
+could be viewed as an encoder that encodes the inner structure of
+the original data. And the decoder decode it by solving the
+differential equations.
+
+\section{Methodology}
+\subsection{first approach}
+The first idea is simple. For a one variable function $u(t)$,
+define a second order differential equations
+in its general form $(\forall t)(F(\frac{d^2u}{{du}^2},\frac{du}{dt},u)=0)$.
+
+The data of the function $u(t)$ are given in tuples denote as
+$(T,U)_i\equiv(T_i,U_i)$. And It's natual to denote the differentials
+as $U^{t}_{i}$ and $U^{tt}_{i}$. There are several method to compute
+these two differentials, including just using the definition of
+the derivative. In this article, local PCA are compute to obtain
+these differentials. Local PCA means to find the K nearest neighbors
+of a given point, which K is a hyperparameter, and perform PCA
+on these points close to each other to get the principal direction.
+The slope of this direction is the derivative $U^{t}$ in general.
+Repeate these process on $(T,U^{t})$ to obtain $U^{tt}$
+
+Create a FCN denote as $f$ to represent
+$F(\frac{d^2u}{{du}^2},\frac{du}{dt},u)$
+$F$ to be $0$ at every data points and to be $1$ all elsewhere is wanted.
+
+To achieve these requirement we evaluate $f$ at all the data points,
+and train the network evaluate these point to $0$. Then randomly sample
+points from the $\mathbb{R}^{3}$ and train these points to be $1$.
+
+
+\begin{algorithm}
+    \caption{$f$ trainer}
+    \begin{algorithmic}[1]
+        \REQUIRE Input parameters $f,T_i, U_i, U^{t}_{i}, U^{tt}_{i}$
+        % \ENSURE Output $z$
+        \STATE Initialize $f$ randomly
+        \REPEAT
+        \STATE $F_i \leftarrow f(U_i,U^{t}_{i},U^{tt}_{i})$
+        \STATE $RAND_i \leftarrow$ randomly sample in $\mathbb{R}^{3}$
+        \STATE $R_i \leftarrow f(RAND_i)$
+        \STATE $L \leftarrow meanSquareError(F_i,0)+0.1*meanSquareError(R_i,1)$
+        \STATE backPropagation against $L$ to optimize $f$
+        \UNTIL {$L$ meets requirement}
+        % \FOR{each $i$ from $1$ to $n$}
+        % \ENDFOR
+        \RETURN $f$
+    \end{algorithmic}
+\end{algorithm}
+
+Once The $f$ was obtained we can perform PINN as a decoder
+to generate new data.
+
+
+The experiment code for the Pics in Results can
+be run by python by program in Github\cite[deSineTasks]{firstApproachGithubProject}
+The requirement environment may be installed by using\cite[reqs]{Envreqs}
+
+\section{Results}
+\subsection{first approach}
+Train the model on a pure $sin(x)$ and try to
+get a result meet the initial condition with
+$U^{t}_0=0.5$ which the $0.5*sin(x)$ would be
+required output. Result shows in Figure \ref{fig:fig1}.
+
+% \begin{figure}[h!]
+%     \centering
+%     \includegraphics[width=0.45\textwidth]{figde3/draw_2D__GeneredData.png}
+%     \includegraphics[width=0.5\textwidth]{figde3/draw_2D__GeneredEqu.png}
+%     \caption{generated data using the PINN to get $0.5*sin(x)$}
+% \end{figure}
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figde3/draw_2D__GeneredData.png} % first figure itself
+        \caption{$0.5*sin(x)$}
+        \label{fig:fig1}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figde3/draw_2D__GeneredEqu.png} % second figure itself
+        \caption{$f$ errors}
+    \end{minipage}
+\end{figure}
+
+\section{Conclusion}
+Summarize the key outcomes and potential future work.
+
+% \begin{thebibliography}{99}
+%     % Use \bibitem to reference your sources. Example:
+%     \bibitem{example-ref} Author Name, \textit{Title of the Paper}, Journal, Year.
+% \end{thebibliography}
+\bibliographystyle{plain}  % or another style like unsrt, IEEEtran, etc.
+\bibliography{references}  % references.bib is the file name
+
+\end{document}
