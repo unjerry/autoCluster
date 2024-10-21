@@ -56,6 +56,16 @@ class test_field:
         self.dataSet = torch.concatenate(dataList)
         print("generating done")
 
+    def gene_data_exp_uniform(self, k: int = 1, num: int = 100, SHf: int = 0) -> None:
+        print("generating sine data")
+        dataList: list[torch.Tensor] = []
+        for _ in range(k):
+            X = torch.rand(num * (_ + 1) ** 2) * 3
+            # X = torch.arange(0, 10, 0.01)
+            dataList.append(torch.stack([X, torch.exp(X) + 2 * _ + SHf], dim=1))
+        self.dataSet = torch.concatenate(dataList)
+        print("generating done")
+
     def draw_data_circle(self) -> None:
         print("draw data")
         plt.style.use("ggplot")
@@ -397,9 +407,9 @@ class test_field:
             d2STPRdT2i[i] = torch.tensor(pca.components_[0][1] / pca.components_[0][0])
         X2i = torch.concatenate([Ti, d2STPRdT2i], dim=1)
 
-        objc.draw_2D(Xi.to("cpu"), "_SineData")
-        objc.draw_2D(X1i.to("cpu"), "_dSineData")
-        objc.draw_2D(X2i.to("cpu"), "_d2SineData")
+        objc.draw_2D(Xi.to("cpu"), "_Data")
+        objc.draw_2D(X1i.to("cpu"), "_dData")
+        objc.draw_2D(X2i.to("cpu"), "_d2Data")
 
         FEAT = torch.concatenate([STPRi, dSTPRdTi, d2STPRdT2i], dim=1)
         print(f"FEAT dim {FEAT.shape}")
@@ -412,13 +422,25 @@ class test_field:
         ax.set_zlabel("Z")  # 坐标轴
         ax.set_ylabel("Y")
         ax.set_xlabel("X")
-        # plt.show()
         plt.savefig(f"fig/draw_3d")
+        plt.show()
         plt.close()
         pca = PCA(n_components=3)
         pca.fit(torch.concatenate([STPRi, dSTPRdTi, d2STPRdT2i], dim=1).to("cpu"))
-        print(pca.components_, pca.explained_variance_, pca.singular_values_)
-        return torch.tensor(pca.components_[2], dtype=torch.float32)
+        print(
+            pca.components_,
+            pca.explained_variance_ / pca.explained_variance_[0],
+            pca.singular_values_ / pca.singular_values_[0],
+            pca.explained_variance_ratio_ / pca.explained_variance_ratio_[0],
+        )
+        RATIO = pca.singular_values_ / pca.singular_values_[0]
+        KL = 0
+        while True or KL < 3:
+            if RATIO[KL] < 0.5:
+                break
+            KL += 1
+        print(KL)
+        return torch.tensor(pca.components_[KL:], dtype=torch.float32)
 
 
 if __name__ == "__main__":
@@ -633,7 +655,7 @@ if __name__ == "__main__":
 
                     objc.f_invOptimizer.step()
                     pass
-            elif arg == "deLinearSetup":
+            elif arg == "deLinearSetupSine":
                 print("SETUP deLinearTasks")
                 objc.gene_data_sine_uniform(1, 500, 0)
                 # objc.compute_pca(2)
@@ -646,6 +668,19 @@ if __name__ == "__main__":
                 objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
+            elif arg == "deLinearSetupExp":
+                print("SETUP deLinearTasks")
+                objc.gene_data_exp_uniform(1, 500, 0)
+                # objc.compute_pca(2)
+
+                objc.f_inv = objc.FCN(1, 1, 64, 4)  # the pde solution
+                objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
+
+                objc.draw_2D(objc.dataSet[:, 0:2], "_ExpData")
+
+                objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
             elif arg == "deLinearTrain":
                 print("START deLinearTraining")
                 objc.f = objc.deLinearTask(10).to(UniDevice)
@@ -653,13 +688,14 @@ if __name__ == "__main__":
                     pickle.dump(objc, pkl_file)
             elif arg == "deLinearGenerate":
                 print("START generate")
-                Ti = torch.arange(0, 15, 0.1).to(UniDevice).view(-1, 1)
+                Ti = torch.arange(0, 5, 0.1).to(UniDevice).view(-1, 1)
                 objc.f_inv.to(UniDevice)
                 objc.f = objc.f.to(UniDevice)
+                print(objc.f)
                 criterion = nn.MSELoss()
                 L = None
                 ZERO = torch.zeros_like(Ti).to(UniDevice)
-                s0 = torch.zeros([1]).to(UniDevice)
+                s0 = torch.ones([1]).to(UniDevice) * 0.5
                 ds0 = torch.ones([1]).to(UniDevice) * 0.5
                 _ = 0
                 while True:
@@ -674,10 +710,10 @@ if __name__ == "__main__":
                     # print(FEAT.shape)
                     L = (
                         criterion(
-                            torch.einsum("ji,i->j", FEAT, objc.f).view(-1, 1), ZERO
+                            torch.einsum("ji,ki->j", FEAT, objc.f).view(-1, 1), ZERO
                         )
                         + 10 * criterion(si[0], s0)
-                        + 10 * criterion(dsi[0], ds0)
+                        + 1000 * criterion(dsi[0], ds0)
                     )
                     L.backward()
                     print(f"iter:{_} L {L}")
@@ -689,7 +725,7 @@ if __name__ == "__main__":
                         print(f"X1 shape {X1i.shape}")
                         objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredData")
                         X1i = torch.concatenate(
-                            [Ti, torch.einsum("ji,i->j", FEAT, objc.f).view(-1, 1)],
+                            [Ti, torch.einsum("ji,ki->j", FEAT, objc.f).view(-1, 1)],
                             dim=1,
                         )
                         objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredEqu")
@@ -703,7 +739,7 @@ if __name__ == "__main__":
                 print(f"X1 shape {X1i.shape}")
                 objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredData")
                 X1i = torch.concatenate(
-                    [Ti, torch.einsum("ji,i->j", FEAT, objc.f).view(-1, 1)], dim=1
+                    [Ti, torch.einsum("ji,ki->j", FEAT, objc.f).view(-1, 1)], dim=1
                 )
                 objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredEqu")
                 with open(datumst_file_path, "wb") as pkl_file:
