@@ -9,7 +9,7 @@
 
 % Title and author info
 \title{Differential Informed Auto-Encoder}
-\author{Zhang Jinrui\thanks{Liu Zhekai,Fu Xiangshuo} \\ \texttt{jerryzhang40@gmail.com}}
+\author{Zhang Jinrui\thanks{Some other guy waiting for add} \\ \texttt{jerryzhang40@gmail.com}}
 
 \date{20241021}  % Empty date; optional, you can also specify a date here
 
@@ -20,19 +20,17 @@
 \begin{abstract}
     In this article, an encoder was trained to obtain the inner
     structure of the original data by obtain a differential equations.
-    A decoder was trained to resample from the domain of original data,
-    to generate new data obey the differential structure of the original
-    data using the Physics Informed Neural Network\cite[PINN]{raissi2017physics}.
+    A decoder was trained to resample the original data domain, to generate new data that obey the differential structure of the original data using the physics-informed neural network\cite[PINN]{raissi2017physics}.
 \end{abstract}
 
 \section{Introduction}
 If the physics formula was obtained in the form of differential equations,
-Physics Informed Neural network can be built to solve it numerically
-in a global scale\cite[PINN]{raissi2017physics}.This process could be view
-as a decoder in a way that it takes a sample point in the domain of
-the partial differential equations, and solve it to get all the corresponding
+a physics-informed neural network can be built to solve it numerically
+on a global scale\cite[PINN]{raissi2017physics}.This process could be seen
+as a decoder in a way that takes a sample point in the domain of
+the partial differential equations, and solve it to get the corresponding
 output of each input point. If only a small and random amount of
-training data was obtained, to resample from the domain we need
+training data was obtained, to re-sample from the domain, we need
 to obtain the differential relationship of the data. This process
 could be viewed as an encoder that encodes the inner structure of
 the original data. And the decoder decode it by solving the
@@ -40,32 +38,32 @@ differential equations.
 
 \section{Methodology}
 \subsection{first approach}
-The first idea is simple. For a one variable function $u(t)$,
-define a second order differential equations
+The first idea is simple. For a one-variable function $u(t)$,
+define a second-order differential equation
 in its general form $(\forall t)(F(\frac{d^2u}{{du}^2},\frac{du}{dt},u)=0)$.
 
 The data of the function $u(t)$ are given in tuples denote as
-$(T,U)_i\equiv(T_i,U_i)$. And It's natual to denote the differentials
-as $U^{t}_{i}$ and $U^{tt}_{i}$. There are several method to compute
+$(T,U)_i\equiv(T_i,U_i)$. And it is natural to denote the differentials
+by $U^{t}_{i}$ and $U^{tt}_{i}$. There are several methods to compute
 these two differentials, including just using the definition of
 the derivative. In this article, local PCA are compute to obtain
-these differentials. Local PCA means to find the K nearest neighbors
-of a given point, which K is a hyperparameter, and perform PCA
+these differentials. Local PCA means finding the nearest K neighbors
+of a given point, which K is a hyper parameter, and performing PCA
 on these points close to each other to get the principal direction.
 The slope of this direction is the derivative $U^{t}$ in general.
-Repeate these process on $(T,U^{t})$ to obtain $U^{tt}$
+Repeat this process on $(T,U^{t})$ to obtain $U^{tt}$
 
 Create a FCN denote as $f$ to represent
 $F(\frac{d^2u}{{du}^2},\frac{du}{dt},u)$
 $F$ to be $0$ at every data points and to be $1$ all elsewhere is wanted.
 
-To achieve these requirement we evaluate $f$ at all the data points,
-and train the network evaluate these point to $0$. Then randomly sample
-points from the $\mathbb{R}^{3}$ and train these points to be $1$.
+To achieve these requirements, we evaluate $f$ at all the data points,
+and train the network to evaluate these points to $0$. Then randomly sample
+the points of $\mathbb{R}^{3}$ and train these points to be $1$ Algorithm\ref{algor:1}.
 
 
 \begin{algorithm}
-    \caption{$f$ trainer}
+    \caption{$f$ trainer}\label{algor:1}
     \begin{algorithmic}[1]
         \REQUIRE Input parameters $f,T_i, U_i, U^{t}_{i}, U^{tt}_{i}$
         % \ENSURE Output $z$
@@ -83,20 +81,103 @@ points from the $\mathbb{R}^{3}$ and train these points to be $1$.
     \end{algorithmic}
 \end{algorithm}
 
-Once The $f$ was obtained we can perform PINN as a decoder
+Once The $f$ was obtained, we can perform PINN as a decoder
 to generate new data.
 
 
-The experiment code for the Pics in Results can
-be run by python by program in Github\cite[deSineTasks]{firstApproachGithubProject}
-The requirement environment may be installed by using\cite[reqs]{Envreqs}
+The experiment code for the pictures in Results can
+be run by a Python program in Github\cite[deSineTasks]{firstApproachGithubProject}
+The requirement environment may be installed using\cite[reqs]{Envreqs}
+
+\subsection{approach with linear assumption}
+For a small randomly sampled data set, the data points
+in the vector space of differentials
+$\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$
+are very low dimensional manifold which in the second order
+differential equation case, the manifold have to be a two dimensional
+manifold to satisfy it is one equation. As the pictures show below Figure\ref{one:dimensionalmani},
+if we only have some of the experimental data input, with
+the algorithm in the first approach, we would set all the
+value in the one dimensional manifold to $0$ but all elsewhere
+to $0$ which is only one specify solution with the same
+initial condition as the input data.
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figLinearSine1_cbf0039b/draw_3d.png}
+    \caption{vector $\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$ sit on 1-dimensional manifold}
+    \label{one:dimensionalmani}
+\end{figure}
+To have more generalization ability, sacrifice
+are necessarily taken with some of the flexibility
+to be able to learn all kind of weird data structures,
+but assume we are learn a Linear equation at the first place.
+In this specific case, the ring shape data points in Figure\ref{one:dimensionalmani}
+need to be treat as a plane cross through the rings span.
+
+As long as the data are on the spanned plane. we will have
+a same differential structure as the data set.
+With this assumption, basically only a specific clean data
+set are required for only one initial condition.
+
+To achieve this result also very straight forward.
+Perform all the method, that has been used to compute the differential vector
+$\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$
+in the first approach. Either directly get the derivatives or
+perform other methods.
+
+After $U_i, U^{t}_{i}, U^{tt}_{i}$ are obtained, the
+latent space of the differential relationships are obtained.
+With the Linear assumption, the equation is Linear so all the
+valid points sit on one same plane. Directly perform PCA on
+these data points, then take the eigen vector $v$ of the
+smallest singular value, the direction that need to be reduced
+has been found. Simply define the encoder function as
+$f(x)=v \cdot x$ Algorithm\ref{algor:2}.
+
+Then minimizing $f$ will reduce one dimension Linearly
+from the latent differentials space. Which can view as $f$ has
+done the job originally constrained by the differential equation.
+
+This method can find all the Linear differential relationship
+i.e. the Linear differential equations,
+from a single function from the entire solution function family.
+\begin{algorithm}
+    \caption{$f$ trainer}\label{algor:2}
+    \begin{algorithmic}[1]
+        \REQUIRE Input parameters $f,T_i, U_i, U^{t}_{i}, U^{tt}_{i}$
+        % \ENSURE Output $z$
+        \STATE Initialize $f$ randomly
+        \REPEAT
+        \STATE $F_i \leftarrow f(U_i,U^{t}_{i},U^{tt}_{i})$
+        \STATE $RAND_i \leftarrow$ randomly sample in $\mathbb{R}^{3}$
+        \STATE $R_i \leftarrow f(RAND_i)$
+        \STATE $L \leftarrow meanSquareError(F_i,0)+0.1*meanSquareError(R_i,1)$
+        \STATE backPropagation against $L$ to optimize $f$
+        \UNTIL {$L$ meets requirement}
+        % \FOR{each $i$ from $1$ to $n$}
+        % \ENDFOR
+        \RETURN $f$
+    \end{algorithmic}
+\end{algorithm}
+The experiment result can be obtained by Github
+code \cite[deLinearTasksSine]{deLinearTasksSine}
+
+\subsection{approach augmentation}
+This method is a autoencoder we can also check the difference
+betwen the input data and the data generate by the PINN in the
+differential relationship constrain. This can view as a parameterize method.
 
 \section{Results}
 \subsection{first approach}
 Train the model on a pure $sin(x)$ and try to
 get a result meet the initial condition with
-$U^{t}_0=0.5$ which the $0.5*sin(x)$ would be
-required output. Result shows in Figure \ref{fig:fig1}.
+$U^{t}_0=0.5$ and $U_0=0.0$ which the exact solution is $0.5*sin(x)$ would be
+required output. Result shows in Figure\ref{fig:fig1}.
+\subsection{approach with linear assumption}
+Train the model on a pure $sin(x)$ and try to
+get a result meet the initial condition with
+$U^{t}_0=0.5$ and $U_0=0.5$ which the exact solution is $\frac{\sqrt{2}}{2}*sin(x+\frac{\pi}{4})$ would be
+required output. Result shows in Figure\ref{fig:fig2}.
 
 % \begin{figure}[h!]
 %     \centering
@@ -115,6 +196,20 @@ required output. Result shows in Figure \ref{fig:fig1}.
     \begin{minipage}{0.45\textwidth}
         \centering
         \includegraphics[width=0.9\textwidth]{figde3/draw_2D__GeneredEqu.png} % second figure itself
+        \caption{$f$ errors}
+    \end{minipage}
+\end{figure}
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figLinearSine1_cbf0039b/draw_2D__GeneredData.png} % first figure itself
+        \caption{$\frac{\sqrt{2}}{2}*sin(x+\frac{\pi}{4})$}
+        \label{fig:fig2}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figLinearSine1_cbf0039b/draw_2D__GeneredEqu.png} % second figure itself
         \caption{$f$ errors}
     \end{minipage}
 \end{figure}
