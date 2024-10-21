@@ -329,7 +329,7 @@ class test_field:
         objc.draw_2D(X1i.to("cpu"), "_dSineData")
         objc.draw_2D(X2i.to("cpu"), "_d2SineData")
 
-        FEAT = torch.concatenate([STPRi, dSTPRdTi, d2STPRdT2i], dim=1)
+        FEAT = torch.concatenate([STPRi, d2STPRdT2i], dim=1)
         print(f"FEAT dim {FEAT.shape}")
 
         print(f"start epoch {self.epoch}")
@@ -502,8 +502,8 @@ if __name__ == "__main__":
                 objc.gene_data_sine_uniform(1, 500, 0)
                 # objc.compute_pca(2)
 
-                objc.f = objc.FCN(3, 1, 16, 4)  # the pde F
-                objc.f_inv = objc.FCN(1, 1, 16, 4)  # the pde solution
+                objc.f = objc.FCN(2, 1, 64, 4)  # the pde F
+                objc.f_inv = objc.FCN(1, 1, 64, 4)  # the pde solution
                 objc.fOptimizer = optim.Adam(objc.f.parameters(), lr=0.0001)
                 objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
 
@@ -531,7 +531,7 @@ if __name__ == "__main__":
                 L = None
                 ZERO = torch.zeros_like(Ti).to(UniDevice)
                 s0 = torch.zeros([1]).to(UniDevice)
-                ds0 = torch.ones([1]).to(UniDevice)
+                ds0 = torch.ones([1]).to(UniDevice) * 0.5
                 _ = 0
                 while True:
                     _ += 1
@@ -541,7 +541,7 @@ if __name__ == "__main__":
                     dsi = vmap(jacrev(objc.f_inv))(Ti).view(-1, 1)
                     d2si = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 1)
                     # print(si, dsi, d2si, sep="\n")
-                    FEAT = torch.concatenate([si, dsi, d2si], dim=1)
+                    FEAT = torch.concatenate([si, d2si], dim=1)
                     # print(FEAT.shape)
                     L = (
                         criterion(objc.f(FEAT), ZERO)
@@ -552,7 +552,7 @@ if __name__ == "__main__":
                     print(f"iter:{_} L {L}")
                     if L < 1e-4:
                         break
-                    if _%1000==0:
+                    if _ % 1000 == 0:
                         print(f"L {L*Ti.shape[0]}")
                         X1i = torch.concatenate([Ti, si], dim=1)
                         print(f"X1 shape {X1i.shape}")
