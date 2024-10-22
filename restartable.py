@@ -2,6 +2,8 @@ import pickle
 import os
 import getopt
 import sys
+import json
+from datetime import datetime
 
 import torch
 import matplotlib.pyplot as plt
@@ -30,6 +32,38 @@ class test_field:
         self.fOptimizer = None
         self.f_invOptimizer = None
         self.epoch = 0
+
+    def gene_data_STPR_get(self) -> None:
+        name = input("name:")
+
+        with open("data/{:s}.json".format(name), "r") as file:
+            data = json.load(file)
+
+        print(data["column"])
+        item_list = data["item"]
+
+        for i in range(10):
+            # print(item_list[i])
+            print(datetime.fromtimestamp(int(item_list[i][0] / 1000)))
+
+        time_X = [item[0] / 1000 for item in item_list]
+        value_Y = [item[5] for item in item_list]
+
+        print(time_X[:10])
+        print(value_Y[:10])
+
+        fig = plt.figure(figsize=(100, 5), dpi=300)
+        plt.scatter(time_X, value_Y)
+        plt.grid()
+        fig.savefig("fig/close_of_{:s}.png".format(name))
+
+        time_X = torch.tensor(time_X)
+        value_Y = torch.tensor(value_Y)
+        print(time_X.shape, value_Y.shape)
+        DATA = torch.stack([time_X, value_Y], dim=1)
+        print(DATA.shape)
+        self.dataSet = DATA
+        pass
 
     def gene_data_circle_uniform(
         self, dimension: int = 2, k: int = 3, each_N: int = 100
@@ -677,6 +711,19 @@ if __name__ == "__main__":
                 objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
 
                 objc.draw_2D(objc.dataSet[:, 0:2], "_ExpData")
+
+                objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
+            elif arg == "deLinearSetupSTPR":
+                print("SETUP deLinearTasks")
+                objc.gene_data_STPR_get()
+                # objc.compute_pca(2)
+
+                objc.f_inv = objc.FCN(1, 1, 64, 4)  # the pde solution
+                objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
+
+                objc.draw_2D(objc.dataSet[:, 0:2], "_STPRData")
 
                 objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
                 with open(datumst_file_path, "wb") as pkl_file:
