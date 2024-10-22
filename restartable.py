@@ -30,7 +30,7 @@ class test_field:
         self.lableSet: torch.Tensor = None
         self.f = None
         self.f_inv = None
-        self.N = None
+        self.N
         self.fOptimizer: torch.optim.Adam = None
         self.f_invOptimizer: torch.optim.Adam = None
         self.NOptimizer: torch.optim.Adam = None
@@ -548,38 +548,13 @@ class test_field:
         LAisj: torch.Tensor = torch.stack(
             [Vis, VTis, VTTis], dim=2
         )  # j<3 LA means latent
-        pass
 
-    def deLinearAugMain(self) -> None:
-        Pis: torch.Tensor = self.dataSet.to(UniDevice)  # (s,t)_i
-        S: int = Pis.shape[1]
-        Ti: torch.Tensor = self.f(Pis)
-        Vis: torch.Tensor = self.f_inv(Ti)
-
-        # # visual the linearity
-        Vis: torch.Tensor = self.f_inv(Ti)  # s<2
-        VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
-        VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
-        for _ in range(2):
-            Vij: torch.Tensor = torch.stack(
-                [Vis[:, _], VTis[:, _], VTTis[:, _]], dim=1
-            )  # j<3
-            self.draw_3D(
-                Vij.to("cpu").detach().numpy(), f"_latentPlot{_}", "d0", "d1", "d2"
-            )
-
-        LAisj: torch.Tensor = torch.stack(
-            [Vis, VTis, VTTis], dim=2
-        )  # j<3 LA means latent
-        pass
-
-        for para in self.N.parameters():
-            print("para", para, sep="\n")
+        self.N = self.NormDot(3, 1).to(UniDevice)
+        self.NOptimizer = optim.Adam(self.N.parameters(), lr=0.0001)
         print("LATENT shape", LAisj.shape)
         print("LATENT dot shape", self.N(LAisj).shape)
         ZERO: torch.Tensor = torch.zeros_like(self.N(LAisj))
-        criterion = nn.MSELoss()
-        for _ in range(10000):
+        for _ in range(1000):
             self.fOptimizer.zero_grad()
             self.f_invOptimizer.zero_grad()
             self.NOptimizer.zero_grad()
@@ -946,18 +921,13 @@ if __name__ == "__main__":
 
                 objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
 
-                objc.f.to(UniDevice)
-                objc.f_inv.to(UniDevice)
-                objc.N = objc.NormDot(3, 1).to(UniDevice)
-                objc.NOptimizer = optim.Adam(objc.N.parameters(), lr=0.0001)
-                objc.deLinearAugTask()
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
             elif arg == "deLinearAugTrain":
                 print("START deLinearAugTrain")
                 objc.f.to(UniDevice)
                 objc.f_inv.to(UniDevice)
-                objc.deLinearAugMain()
+                objc.deLinearAugTask()
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
 
