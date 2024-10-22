@@ -592,6 +592,73 @@ class test_field:
 
         pass
 
+    def deLinearAugMain(self) -> None:
+        Pis: torch.Tensor = self.dataSet.to(UniDevice)  # (s,t)_i
+        S: int = Pis.shape[1]
+        Ti: torch.Tensor = self.f(Pis)
+        Vis: torch.Tensor = self.f_inv(Ti)
+
+        # # visual the linearity
+        Vis: torch.Tensor = self.f_inv(Ti)  # s<2
+        VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+        VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+        for _ in range(2):
+            Vij: torch.Tensor = torch.stack(
+                [Vis[:, _], VTis[:, _], VTTis[:, _]], dim=1
+            )  # j<3
+            self.draw_3D(
+                Vij.to("cpu").detach().numpy(), f"_latentPlot{_}", "d0", "d1", "d2"
+            )
+
+        LAisj: torch.Tensor = torch.stack(
+            [Vis, VTis, VTTis], dim=2
+        )  # j<3 LA means latent
+        pass
+
+        for para in self.N.parameters():
+            print("para", para, sep="\n")
+        print("LATENT shape", LAisj.shape)
+        print("LATENT dot shape", self.N(LAisj).shape)
+        ZERO: torch.Tensor = torch.zeros_like(self.N(LAisj))
+        criterion = nn.MSELoss()
+        for _ in range(10000):
+            self.fOptimizer.zero_grad()
+            self.f_invOptimizer.zero_grad()
+            self.NOptimizer.zero_grad()
+
+            Ti: torch.Tensor = self.f(Pis)
+            Vis: torch.Tensor = self.f_inv(Ti)
+            VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+            VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+            LAisj: torch.Tensor = torch.stack(
+                [Vis, VTis, VTTis], dim=2
+            )  # j<3 LA means latent
+            L: torch.Tensor = criterion(Vis, Pis) + criterion(self.N(LAisj), ZERO)
+            L.backward()
+            print(f"iter:{_}, L {L}")
+
+            self.fOptimizer.step()
+            self.f_invOptimizer.step()
+            self.NOptimizer.step()
+
+        # visual the linearity
+        Vis: torch.Tensor = self.f_inv(Ti)  # s<2
+        VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+        VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+        for _ in range(S):
+            Vij: torch.Tensor = torch.stack(
+                [Vis[:, _], VTis[:, _], VTTis[:, _]], dim=1
+            )  # j<3
+            self.draw_3D(
+                Vij.to("cpu").detach().numpy(), f"_latentPlot{_}", "d0", "d1", "d2"
+            )
+        for para in self.N.parameters():
+            print("para", para, sep="\n")
+        objc.draw_2D(Pis.to("cpu").detach().numpy(), "_circleDataInTask")
+        objc.draw_2D(Vis.to("cpu").detach().numpy(), "_circleGeneInTask")
+
+        pass
+
 
 if __name__ == "__main__":
     # loading the data into objc
@@ -928,6 +995,7 @@ if __name__ == "__main__":
                 objc.f.to(UniDevice)
                 objc.f_inv.to(UniDevice)
                 objc.deLinearAugTask()
+                objc.deLinearAugMain()
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
 
