@@ -30,7 +30,7 @@ class test_field:
         self.lableSet: torch.Tensor = None
         self.f = None
         self.f_inv = None
-        self.N
+        self.N = None
         self.fOptimizer: torch.optim.Adam = None
         self.f_invOptimizer: torch.optim.Adam = None
         self.NOptimizer: torch.optim.Adam = None
