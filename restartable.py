@@ -18,6 +18,7 @@ from sklearn.neighbors import KDTree
 from torch.func import jacrev, vmap
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 
 np.random.seed(0)
 UniDevice = "cuda"
@@ -29,8 +30,10 @@ class test_field:
         self.lableSet: torch.Tensor = None
         self.f = None
         self.f_inv = None
-        self.fOptimizer = None
-        self.f_invOptimizer = None
+        self.N = None
+        self.fOptimizer: torch.optim.Adam = None
+        self.f_invOptimizer: torch.optim.Adam = None
+        self.NOptimizer: torch.optim.Adam = None
         self.epoch = 0
 
     def gene_data_STPR_get(self) -> None:
@@ -78,7 +81,7 @@ class test_field:
             )
             lis.append(torch.stack([z.real, z.imag], dim=1))
         self.dataSet = torch.concatenate(lis, dim=0)
-        print("centers", centers, radiuss, self.dataSet, sep="\n")
+        print("centers START", centers, radiuss, self.dataSet, "END", sep="\n")
 
     def gene_data_sine_uniform(self, k: int = 1, num: int = 100, SHf: int = 0) -> None:
         print("generating sine data")
@@ -151,6 +154,27 @@ class test_field:
         plt.savefig(f"fig/draw_2D_{name}")
         print("draw done")
         plt.close()
+        pass
+
+    def draw_3D(
+        self,
+        data: torch.Tensor,
+        name: str,
+        lable_X: str = "X",
+        lable_Y: str = "Y",
+        lable_Z: str = "Z",
+    ) -> None:
+        print(f"draw data 3d {name}")
+        plt.style.use("ggplot")
+        ax = plt.subplot(111, projection="3d")
+        ax.scatter(data[:, 0], data[:, 1], data[:, 2])
+        ax.set_zlabel(lable_Z)  # 坐标轴
+        ax.set_ylabel(lable_Y)
+        ax.set_xlabel(lable_X)
+        plt.savefig(f"fig/draw_3D_{name}")
+        plt.show()
+        plt.close()
+        print("draw done")
         pass
 
     def draw_1D(self, data: torch.Tensor, name: str) -> None:
@@ -241,6 +265,18 @@ class test_field:
             x = self.fch(x)
             x = self.fce(x)
             return x
+
+    class NormDot(nn.Module):
+        "define a dot with a normal vector"
+
+        def __init__(self, N_INPUT, N_OUTPUT):
+            super().__init__()
+            self.N = nn.Parameter(F.normalize(torch.rand([N_OUTPUT, N_INPUT])))
+
+        def forward(self, x):
+            with torch.no_grad():
+                self.N.data = F.normalize(self.N)
+            return torch.einsum("...j,ij->...i", x, self.N)
 
     def localDis(self, P: torch.Tensor, Q: torch.Tensor):
         return torch.dist(P, Q)
@@ -441,8 +477,8 @@ class test_field:
             d2STPRdT2i[i] = torch.tensor(pca.components_[0][1] / pca.components_[0][0])
         X2i = torch.concatenate([Ti, d2STPRdT2i], dim=1)
 
-        objc.draw_2D(Xi.to("cpu"), "_Data")
-        objc.draw_2D(X1i.to("cpu"), "_dData")
+        objc.draw_2D(Xi.to("cpu"), "_d0Data")
+        objc.draw_2D(X1i.to("cpu"), "_d1Data")
         objc.draw_2D(X2i.to("cpu"), "_d2Data")
 
         FEAT = torch.concatenate([STPRi, dSTPRdTi, d2STPRdT2i], dim=1)
@@ -475,6 +511,111 @@ class test_field:
             KL += 1
         print(KL)
         return torch.tensor(pca.components_[KL:], dtype=torch.float32)
+
+    def deLinearAugTask(self) -> None:
+        Pis: torch.Tensor = self.dataSet.to(UniDevice)  # (s,t)_i
+        S: int = Pis.shape[1]
+        Ti: torch.Tensor = self.f(Pis)
+        Vis: torch.Tensor = self.f_inv(Ti)
+
+        # train a normal autoEncoder
+        criterion = nn.MSELoss()
+        for _ in range(1000):
+            self.fOptimizer.zero_grad()
+            self.f_invOptimizer.zero_grad()
+
+            Ti: torch.Tensor = self.f(Pis)
+            Vis: torch.Tensor = self.f_inv(Ti)
+            L: torch.Tensor = criterion(Vis, Pis)
+            L.backward()
+            print(f"iter:{_}, L {L}")
+
+            self.fOptimizer.step()
+            self.f_invOptimizer.step()
+
+        # # visual the linearity
+        Vis: torch.Tensor = self.f_inv(Ti)  # s<2
+        VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+        VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+        for _ in range(2):
+            Vij: torch.Tensor = torch.stack(
+                [Vis[:, _], VTis[:, _], VTTis[:, _]], dim=1
+            )  # j<3
+            self.draw_3D(
+                Vij.to("cpu").detach().numpy(), f"_latentPlot{_}", "d0", "d1", "d2"
+            )
+
+        LAisj: torch.Tensor = torch.stack(
+            [Vis, VTis, VTTis], dim=2
+        )  # j<3 LA means latent
+        pass
+
+    def deLinearAugMain(self) -> None:
+        Pis: torch.Tensor = self.dataSet.to(UniDevice)  # (s,t)_i
+        S: int = Pis.shape[1]
+        Ti: torch.Tensor = self.f(Pis)
+        Vis: torch.Tensor = self.f_inv(Ti)
+
+        # # visual the linearity
+        Vis: torch.Tensor = self.f_inv(Ti)  # s<2
+        VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+        VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+        for _ in range(2):
+            Vij: torch.Tensor = torch.stack(
+                [Vis[:, _], VTis[:, _], VTTis[:, _]], dim=1
+            )  # j<3
+            self.draw_3D(
+                Vij.to("cpu").detach().numpy(), f"_latentPlot{_}", "d0", "d1", "d2"
+            )
+
+        LAisj: torch.Tensor = torch.stack(
+            [Vis, VTis, VTTis], dim=2
+        )  # j<3 LA means latent
+        pass
+
+        for para in self.N.parameters():
+            print("para", para, sep="\n")
+        print("LATENT shape", LAisj.shape)
+        print("LATENT dot shape", self.N(LAisj).shape)
+        ZERO: torch.Tensor = torch.zeros_like(self.N(LAisj))
+        criterion = nn.MSELoss()
+        for _ in range(10000):
+            self.fOptimizer.zero_grad()
+            self.f_invOptimizer.zero_grad()
+            self.NOptimizer.zero_grad()
+
+            Ti: torch.Tensor = self.f(Pis)
+            Vis: torch.Tensor = self.f_inv(Ti)
+            VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+            VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+            LAisj: torch.Tensor = torch.stack(
+                [Vis, VTis, VTTis], dim=2
+            )  # j<3 LA means latent
+            L: torch.Tensor = criterion(Vis, Pis) + criterion(self.N(LAisj), ZERO)
+            L.backward()
+            print(f"iter:{_}, L {L}")
+
+            self.fOptimizer.step()
+            self.f_invOptimizer.step()
+            self.NOptimizer.step()
+
+        # visual the linearity
+        Vis: torch.Tensor = self.f_inv(Ti)  # s<2
+        VTis: torch.Tensor = vmap(jacrev(objc.f_inv))(Ti).view(-1, 2)
+        VTTis: torch.Tensor = vmap(jacrev(jacrev(objc.f_inv)))(Ti).view(-1, 2)
+        for _ in range(S):
+            Vij: torch.Tensor = torch.stack(
+                [Vis[:, _], VTis[:, _], VTTis[:, _]], dim=1
+            )  # j<3
+            self.draw_3D(
+                Vij.to("cpu").detach().numpy(), f"_latentPlot{_}", "d0", "d1", "d2"
+            )
+        for para in self.N.parameters():
+            print("para", para, sep="\n")
+        objc.draw_2D(Pis.to("cpu").detach().numpy(), "_circleDataInTask")
+        objc.draw_2D(Vis.to("cpu").detach().numpy(), "_circleGeneInTask")
+
+        pass
 
 
 if __name__ == "__main__":
@@ -691,7 +832,7 @@ if __name__ == "__main__":
                     pass
             elif arg == "deLinearSetupSine":
                 print("SETUP deLinearTasks")
-                objc.gene_data_sine_uniform(1, 500, 0)
+                objc.gene_data_sine_uniform(1, 100, 0)
                 # objc.compute_pca(2)
 
                 objc.f_inv = objc.FCN(1, 1, 64, 4)  # the pde solution
@@ -789,6 +930,34 @@ if __name__ == "__main__":
                     [Ti, torch.einsum("ji,ki->j", FEAT, objc.f).view(-1, 1)], dim=1
                 )
                 objc.draw_2D(X1i.to("cpu").detach().numpy(), "_GeneredEqu")
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
+            elif arg == "deLinearAugSetupCircle":
+                print("SETUP deLinearTasks")
+                objc.gene_data_circle_uniform(2, 1, 100)
+                objc.compute_pca(2)
+
+                objc.f_inv = objc.FCN(1, 2, 128, 4)  # the parametrize decoder
+                objc.f = objc.FCN(2, 1, 128, 4)
+                objc.f_invOptimizer = optim.Adam(objc.f_inv.parameters(), lr=0.0001)
+                objc.fOptimizer = optim.Adam(objc.f.parameters(), lr=0.0001)
+
+                objc.draw_2D(objc.dataSet[:, 0:2], "_circleData")
+
+                objc.dataSet = torch.tensor(objc.dataSet, dtype=torch.float32)
+
+                objc.f.to(UniDevice)
+                objc.f_inv.to(UniDevice)
+                objc.N = objc.NormDot(3, 1).to(UniDevice)
+                objc.NOptimizer = optim.Adam(objc.N.parameters(), lr=0.0001)
+                objc.deLinearAugTask()
+                with open(datumst_file_path, "wb") as pkl_file:
+                    pickle.dump(objc, pkl_file)
+            elif arg == "deLinearAugTrain":
+                print("START deLinearAugTrain")
+                objc.f.to(UniDevice)
+                objc.f_inv.to(UniDevice)
+                objc.deLinearAugMain()
                 with open(datumst_file_path, "wb") as pkl_file:
                     pickle.dump(objc, pkl_file)
 
