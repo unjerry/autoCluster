@@ -142,23 +142,16 @@ This method can find all the Linear differential relationship
 i.e. the Linear differential equations,
 from a single function from the entire solution function family.
 \begin{algorithm}
-    \caption{$f$ trainer}\label{algor:2}
+    \caption{normal vector $v$ calculator}\label{algor:2}
     \begin{algorithmic}[1]
-        \REQUIRE Input parameters $f,T_i, U_i, U^{t}_{i}, U^{tt}_{i}$
-        % \ENSURE Output $z$
-        \STATE Initialize $f$ randomly
-        \REPEAT
-        \STATE $F_i \leftarrow f(U_i,U^{t}_{i},U^{tt}_{i})$
-        \STATE $RAND_i \leftarrow$ randomly sample in $\mathbb{R}^{3}$
-        \STATE $R_i \leftarrow f(RAND_i)$
-        \STATE $L \leftarrow meanSquareError(F_i,0)+0.1*meanSquareError(R_i,1)$
-        \STATE backPropagation against $L$ to optimize $f$
-        \UNTIL {$L$ meets requirement}
-        % \FOR{each $i$ from $1$ to $n$}
-        % \ENDFOR
-        \RETURN $f$
+        \REQUIRE Input parameters $U_i, U^{t}_{i}, U^{tt}_{i}$
+        \STATE stack $(U_i,U^{t}_{i},U^{tt}_{i})$ to latent vectors $LAT_{ij}$
+        \STATE perform $PCA(LAT_{ij})$
+        \STATE $v \leftarrow$ the eigen vector of the smallest singular value
+        \RETURN $v$
     \end{algorithmic}
 \end{algorithm}
+
 The experiment result can be obtained by Github
 code \cite[deLinearTasksSine]{deLinearTasksSine}
 
@@ -166,6 +159,64 @@ code \cite[deLinearTasksSine]{deLinearTasksSine}
 This method is a autoencoder we can also check the difference
 betwen the input data and the data generate by the PINN in the
 differential relationship constrain. This can view as a parameterize method.
+
+If the Manifold Hypothesis hold, a high dimensional
+dataset $x_\delta$ is a lower dimensional manifold $\rho_d$ embedding in
+the high dimension space. Denote the dimension of the
+original data $\Delta$, and denote the dimension of the
+latent variable $D$. To parameterize the data manifold,
+we need a decoder $\mathbb{R}^{D} \xrightarrow{f^{-1}} \mathbb{R}^{\Delta}$
+, ${\rho}_d \mapsto y_\delta$. The jacobian of ${f^{-1}}$
+denote as $J({f^{-1}})=J^\delta_d=\frac{\partial y_\delta}{\partial \rho_d}$.
+Denote the second order jacobian as
+$J^2({f^{-1}})=J^\delta_{d_1 d_2}=\frac{\partial^2 y_\delta}{\partial \rho_{d_1}\partial \rho_{d_2}}$.
+For the sake of symbolic coherence, denote
+$J^0({f^{-1}})=J^\delta$
+To find a linear differential equation means to find
+equation in the form of
+$A_{d_1 d_2}J^\delta_{d_1 d_2}+A_{d}J^\delta_d+AJ^\delta=0$. The generate
+equation of order $N$ could be written as
+$\sum_{j=0}^{N} A_{d_1 d_2 ... d_j}J^\delta_{d_1 d_2 ... d_j}=0$.
+As we only want to find the direction of the hyper plane,
+the normal vector concatenate $(\forall j\leq N)A_{d_1 d_2 ... d_j}$
+denote as $V$, need to be normalize. To check this idea correctly, the $V$ is a
+vector of dimension $\sum_{j=0}^{N} D^{j}$, so this algorithm
+may be computaional heavy to some higher order differential
+relationship encode, or to some high latent dimension encode task.
+
+For the other side of the autoencoder, we donote
+the encoder as $\mathbb{R}^{\Delta} \xrightarrow{f} \mathbb{R}^{D}$,
+$x_\delta \mapsto {\rho}_d$. Normal autoencoder
+requires minimizing the mean square error betwen
+$x_\delta, y_\delta$. In the differential Informed
+method, the
+$A_{d_1 d_2}J^\delta_{d_1 d_2}+A_{d}J^\delta_d+AJ^\delta$
+term also need to be optimize to zero Algorithm\ref{algor:3}.
+\begin{algorithm}
+    \caption{normal vector $v$ calculator}\label{algor:3}
+    \begin{algorithmic}[1]
+        \REQUIRE Input parameters $f, f^{-1}, x_\delta ,(\forall j\leq N)A_{d_1 d_2 ... d_j}$
+        \STATE Initialize $f, f^{-1}$ randomly
+        \REPEAT
+        \STATE $\rho_d \leftarrow f(x_\delta)$
+        \STATE $y_\delta \leftarrow f^{-1}(\rho_d)$
+        \STATE $L \leftarrow meanSquareError(x_\delta,y_\delta)$
+        \STATE backPropagation against $L$ to optimize $f, f^{-1}$
+        \UNTIL {$L$ meets requirement}
+        \RETURN $f$
+        \REPEAT
+        \STATE $\rho_d \leftarrow f(x_\delta)$
+        \STATE $y_\delta \leftarrow f^{-1}(\rho_d)$
+        \STATE $(\forall j\leq N)A_{d_1 d_2 ... d_j} \leftarrow$ calculate the jacobian of each order
+        \STATE $L \leftarrow mse(x_\delta,y_\delta)+mse(\sum_{j=0}^{N} A_{d_1 d_2 ... d_j}J^\delta_{d_1 d_2 ... d_j},0)$
+        \STATE backPropagation against $L$ to optimize $f, f^{-1},(\forall j\leq N)A_{d_1 d_2 ... d_j}$
+        \UNTIL {$L$ meets requirement}
+        \RETURN $f$
+    \end{algorithmic}
+\end{algorithm}
+
+The experiment result can be obtained by Github
+code \cite[deLinearAugSine]{deLinearAugSine}
 
 \section{Results}
 \subsection{first approach}
@@ -178,6 +229,13 @@ Train the model on a pure $sin(x)$ and try to
 get a result meet the initial condition with
 $U^{t}_0=0.5$ and $U_0=0.5$ which the exact solution is $\frac{\sqrt{2}}{2}*sin(x+\frac{\pi}{4})$ would be
 required output. Result shows in Figure\ref{fig:fig2}.
+\subsection{approach augmentation}
+Train the model on a 2D circle and try to
+get a result of $x^\delta=y^\delta(\rho)=[cos(\rho),sin(\rho)]$,
+and the corresponding differential equation is
+$\frac{\partial^2 y_\delta}{{\partial \rho}^2}+y_\delta=0$
+Result of the latent space structure shows in Figure\ref{fig:fig3} and Figure\ref{fig:fig4}, with the
+numerical result $0.7360\frac{\partial^2 y_\delta}{{\partial \rho}^2}-0.0328\frac{\partial y_\delta}{{\partial \rho}}+  0.6761y_\delta=0$.
 
 % \begin{figure}[h!]
 %     \centering
@@ -213,9 +271,66 @@ required output. Result shows in Figure\ref{fig:fig2}.
         \caption{$f$ errors}
     \end{minipage}
 \end{figure}
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figAugWithP/draw_3D__latentPlot0.png} % first figure itself
+        \caption{first component latent space of $y^\delta(\rho)$}
+        \label{fig:fig3}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figAugWithP/draw_3D__latentPlot1.png} % second figure itself
+        \caption{second component latent space of $y^\delta(\rho)$}
+    \end{minipage}
+\end{figure}
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figAugWithP/draw_2D__circleData.png} % first figure itself
+        \caption{original data $x_\delta$}
+        \label{fig:fig4}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figAugWithP/draw_2D__circleGeneInTask.png} % second figure itself
+        \caption{regenerate data $y_\delta$}
+    \end{minipage}
+\end{figure}
 
 \section{Conclusion}
 Summarize the key outcomes and potential future work.
+
+To really get the data structure manifold in the
+high dimensional space is a hard task. In this article,
+two method was developed to get a dimension reduce
+algorithm with more ability to explanation.
+
+The naive one
+is just compute the PCA of neighborhood of each point
+in the dataset, to find the latent differential structures
+as shown in Figure\ref{one:dimensionalmani}, this can also
+be treated as the global check if the dataset meet the
+Manifold Hypothesis. With sufficient amount of data, the first
+method could learn basically all the nonlinear differential
+relationship in the dataset, and leverage the ability of
+PINN \cite[PINN]{raissi2017physics} to generate new data agree
+with the differential relationships.
+
+The second method make a Linearity assumption, to significantly
+reduce the requirement of the amount of data.
+The augmentation of the Linearity assumption method, could be
+seen as a autoencoder who wants to find a parameterize agree
+some Linear differential equations.With this method, the machine
+refound the $sin$ and $cos$ function from the circle dataset.
+
+For the future work this model need to be test on more
+complicated data set agree with more intricate differential relationships.
+The jacobian for high dimensional latent space with high order differential relationship
+would require geometric amount of computaional complexity $\sum_{j=0}^{N} D^{j}$ which may be augmentated or
+avoid by more advanced innovation in the future to have more efficiency.
 
 % \begin{thebibliography}{99}
 %     % Use \bibitem to reference your sources. Example:
