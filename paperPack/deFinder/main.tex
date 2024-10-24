@@ -73,7 +73,7 @@ the points of $\mathbb{R}^{3}$ and train these points to be $1$ Algorithm\ref{al
         \STATE $RAND_i \leftarrow$ randomly sample in $\mathbb{R}^{3}$
         \STATE $R_i \leftarrow f(RAND_i)$
         \STATE $L \leftarrow meanSquareError(F_i,0)+0.1*meanSquareError(R_i,1)$
-        \STATE backPropagation against $L$ to optimize $f$
+        \STATE back Propagation against $L$ to optimize $f$
         \UNTIL {$L$ meets requirement}
         % \FOR{each $i$ from $1$ to $n$}
         % \ENDFOR
@@ -91,55 +91,55 @@ The requirement environment may be installed using\cite[reqs]{Envreqs}
 
 \subsection{approach with linear assumption}
 For a small randomly sampled data set, the data points
-in the vector space of differentials
+in the differential vector space
 $\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$
-are very low dimensional manifold which in the second order
-differential equation case, the manifold have to be a two dimensional
-manifold to satisfy it is one equation. As the pictures show below Figure\ref{one:dimensionalmani},
+are a low-dimensional manifold. With only one equation to satisfy, the dimension of the manifold in the latent space would be exactly one less than the whole space dimension. In the second-order
+differential equation case, the manifold has to be a two-dimensional
+manifold. As the pictures show in Figure\ref{one:dimensionalmani},
 if we only have some of the experimental data input, with
 the algorithm in the first approach, we would set all the
-value in the one dimensional manifold to $0$ but all elsewhere
+values in the one-dimensional manifold to $0$ but all elsewhere
 to $0$ which is only one specify solution with the same
 initial condition as the input data.
 \begin{figure}[ht!]
     \centering
     \includegraphics[width=1.0\textwidth]{figLinearSine1_cbf0039b/draw_3d.png}
-    \caption{vector $\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$ sit on 1-dimensional manifold}
+    \caption{vectors $\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$ sit on 1-dimensional manifold}
     \label{one:dimensionalmani}
 \end{figure}
+
 To have more generalization ability, sacrifice
-are necessarily taken with some of the flexibility
+is necessarily taken with some of the flexibility
 to be able to learn all kind of weird data structures,
-but assume we are learn a Linear equation at the first place.
+but assume that we are learning a linear equation at the first place.
 In this specific case, the ring shape data points in Figure\ref{one:dimensionalmani}
-need to be treat as a plane cross through the rings span.
+need to be treated as a plane crossing through the ring span.
 
 As long as the data are on the spanned plane. we will have
-a same differential structure as the data set.
+the same differential structure as the data set.
 With this assumption, basically only a specific clean data
 set are required for only one initial condition.
 
-To achieve this result also very straight forward.
-Perform all the method, that has been used to compute the differential vector
+Obtaining this result is also very straightforward.
+Perform all the methods that have been used to compute the differential vector
 $\left[\begin{matrix}{U}&{U^{t}}&{U^{tt}}\end{matrix}\right]$
 in the first approach. Either directly get the derivatives or
 perform other methods.
 
 After $U_i, U^{t}_{i}, U^{tt}_{i}$ are obtained, the
-latent space of the differential relationships are obtained.
-With the Linear assumption, the equation is Linear so all the
-valid points sit on one same plane. Directly perform PCA on
+latent space of the differential relationships is obtained.
+With the linear assumption, the equation is linear so all the
+valid points sit on one same plane. Perform PCA directly on
 these data points, then take the eigen vector $v$ of the
-smallest singular value, the direction that need to be reduced
+smallest singular value, the direction that needs to be reduced
 has been found. Simply define the encoder function as
 $f(x)=v \cdot x$ Algorithm\ref{algor:2}.
 
-Then minimizing $f$ will reduce one dimension Linearly
-from the latent differentials space. Which can view as $f$ has
+Then minimizing $f$ will reduce one dimension linearly
+from the latent differential space. The function $f$ has
 done the job originally constrained by the differential equation.
 
-This method can find all the Linear differential relationship
-i.e. the Linear differential equations,
+This method can find all the linear differential relationships, i.e. the linear differential equations,
 from a single function from the entire solution function family.
 \begin{algorithm}
     \caption{normal vector $v$ calculator}\label{algor:2}
@@ -156,19 +156,19 @@ The experiment result can be obtained by Github
 code \cite[deLinearTasksSine]{deLinearTasksSine}
 
 \subsection{approach augmentation}
-This method is a autoencoder we can also check the difference
+This method is a AutoEncoder we can also check the difference
 betwen the input data and the data generate by the PINN in the
 differential relationship constrain. This can view as a parameterize method.
 
 If the Manifold Hypothesis hold, a high dimensional
-dataset $x_\delta$ is a lower dimensional manifold $\rho_d$ embedding in
-the high dimension space. Denote the dimension of the
+dataset $x_\delta$ is a lower-dimensional manifold $\rho_d$ embedding in
+the high-dimension space. Denote the dimension of the
 original data $\Delta$, and denote the dimension of the
 latent variable $D$. To parameterize the data manifold,
 we need a decoder $\mathbb{R}^{D} \xrightarrow{f^{-1}} \mathbb{R}^{\Delta}$
 , ${\rho}_d \mapsto y_\delta$. The jacobian of ${f^{-1}}$
-denote as $J({f^{-1}})=J^\delta_d=\frac{\partial y_\delta}{\partial \rho_d}$.
-Denote the second order jacobian as
+denoted as $J({f^{-1}})=J^\delta_d=\frac{\partial y_\delta}{\partial \rho_d}$.
+Denote the second-order jacobian as
 $J^2({f^{-1}})=J^\delta_{d_1 d_2}=\frac{\partial^2 y_\delta}{\partial \rho_{d_1}\partial \rho_{d_2}}$.
 For the sake of symbolic coherence, denote
 $J^0({f^{-1}})=J^\delta$
@@ -179,19 +179,18 @@ equation of order $N$ could be written as
 $\sum_{j=0}^{N} A_{d_1 d_2 ... d_j}J^\delta_{d_1 d_2 ... d_j}=0$.
 As we only want to find the direction of the hyper plane,
 the normal vector concatenate $(\forall j\leq N)A_{d_1 d_2 ... d_j}$
-denote as $V$, need to be normalize. To check this idea correctly, the $V$ is a
+denoted as $V$, need to be normalized. To check this idea correctly, the $V$ is a
 vector of dimension $\sum_{j=0}^{N} D^{j}$, so this algorithm
-may be computaional heavy to some higher order differential
+may be computaional heavy to some higher-order differential
 relationship encode, or to some high latent dimension encode task.
 
-For the other side of the autoencoder, we donote
+For the other side of the AutoEncoder, we denote
 the encoder as $\mathbb{R}^{\Delta} \xrightarrow{f} \mathbb{R}^{D}$,
-$x_\delta \mapsto {\rho}_d$. Normal autoencoder
-requires minimizing the mean square error betwen
-$x_\delta, y_\delta$. In the differential Informed
+$x_\delta \mapsto {\rho}_d$. The normal AutoEncoder
+requires minimizing the mean square error between
+$x_\delta, y_\delta$. In the differential informed
 method, the
-$A_{d_1 d_2}J^\delta_{d_1 d_2}+A_{d}J^\delta_d+AJ^\delta$
-term also need to be optimize to zero Algorithm\ref{algor:3}.
+term $A_{d_1 d_2}J^\delta_{d_1 d_2}+A_{d}J^\delta_d+AJ^\delta$ also needs to be optimized to zero Algorithm\ref{algor:3}.
 \begin{algorithm}
     \caption{normal vector $v$ calculator}\label{algor:3}
     \begin{algorithmic}[1]
@@ -201,40 +200,39 @@ term also need to be optimize to zero Algorithm\ref{algor:3}.
         \STATE $\rho_d \leftarrow f(x_\delta)$
         \STATE $y_\delta \leftarrow f^{-1}(\rho_d)$
         \STATE $L \leftarrow meanSquareError(x_\delta,y_\delta)$
-        \STATE backPropagation against $L$ to optimize $f, f^{-1}$
+        \STATE back Propagation against $L$ to optimize $f, f^{-1}$
         \UNTIL {$L$ meets requirement}
         \RETURN $f$
         \REPEAT
         \STATE $\rho_d \leftarrow f(x_\delta)$
         \STATE $y_\delta \leftarrow f^{-1}(\rho_d)$
-        \STATE $(\forall j\leq N)A_{d_1 d_2 ... d_j} \leftarrow$ calculate the jacobian of each order
+        \STATE $(\forall j\leq N)A_{d_1 d_2 ... d_j} \leftarrow$ calculate the Jacobian of each order
         \STATE $L \leftarrow mse(x_\delta,y_\delta)+mse(\sum_{j=0}^{N} A_{d_1 d_2 ... d_j}J^\delta_{d_1 d_2 ... d_j},0)$
-        \STATE backPropagation against $L$ to optimize $f, f^{-1},(\forall j\leq N)A_{d_1 d_2 ... d_j}$
+        \STATE back Propagation against $L$ to optimize $f, f^{-1},(\forall j\leq N)A_{d_1 d_2 ... d_j}$
         \UNTIL {$L$ meets requirement}
         \RETURN $f$
     \end{algorithmic}
 \end{algorithm}
 
-The experiment result can be obtained by Github
+The result of the experiment can be obtained using the Github
 code \cite[deLinearAugSine]{deLinearAugSine}
 
 \section{Results}
 \subsection{first approach}
 Train the model on a pure $sin(x)$ and try to
-get a result meet the initial condition with
-$U^{t}_0=0.5$ and $U_0=0.0$ which the exact solution is $0.5*sin(x)$ would be
-required output. Result shows in Figure\ref{fig:fig1}.
+get a result that satisfies the initial condition with
+$U^{t}_0=0.5$ and $U_0=0.0$ to which the exact solution is $0.5*sin(x)$ would. The result is shown in Figure\ref{fig:fig1}.
 \subsection{approach with linear assumption}
 Train the model on a pure $sin(x)$ and try to
-get a result meet the initial condition with
-$U^{t}_0=0.5$ and $U_0=0.5$ which the exact solution is $\frac{\sqrt{2}}{2}*sin(x+\frac{\pi}{4})$ would be
-required output. Result shows in Figure\ref{fig:fig2}.
+get a result that satisfies the initial condition with
+$U^{t}_0=0.5$ and $U_0=0.5$ in which the exact solution is $\frac{\sqrt{2}}{2}*sin(x+\frac{\pi}{4})$ would be
+required output. The result is shown in Figure\ref{fig:fig2}.
 \subsection{approach augmentation}
 Train the model on a 2D circle and try to
 get a result of $x^\delta=y^\delta(\rho)=[cos(\rho),sin(\rho)]$,
 and the corresponding differential equation is
 $\frac{\partial^2 y_\delta}{{\partial \rho}^2}+y_\delta=0$
-Result of the latent space structure shows in Figure\ref{fig:fig3} and Figure\ref{fig:fig4}, with the
+Result of the latent space structure shows in Figures\ref{fig:fig3} and Figure\ref{fig:fig4}, with the
 numerical result $0.7360\frac{\partial^2 y_\delta}{{\partial \rho}^2}-0.0328\frac{\partial y_\delta}{{\partial \rho}}+  0.6761y_\delta=0$.
 
 % \begin{figure}[h!]
@@ -303,34 +301,33 @@ numerical result $0.7360\frac{\partial^2 y_\delta}{{\partial \rho}^2}-0.0328\fra
 \section{Conclusion}
 Summarize the key outcomes and potential future work.
 
-To really get the data structure manifold in the
-high dimensional space is a hard task. In this article,
-two method was developed to get a dimension reduce
-algorithm with more ability to explanation.
+Getting the data structure manifold in the
+high-dimensional space is a hard task. In this article,
+two methods were developed to get a dimension reduce
+algorithm with greater ability to explanation.
 
 The naive one
-is just compute the PCA of neighborhood of each point
+is to simply compute the PCA of neighborhood of each point
 in the dataset, to find the latent differential structures
 as shown in Figure\ref{one:dimensionalmani}, this can also
-be treated as the global check if the dataset meet the
-Manifold Hypothesis. With sufficient amount of data, the first
-method could learn basically all the nonlinear differential
-relationship in the dataset, and leverage the ability of
-PINN \cite[PINN]{raissi2017physics} to generate new data agree
+be treated as the global check if the data set meets the manifold hypothesis. With sufficient data, the first
+method could basically learn all the nonlinear differential
+relationships in the dataset, and take advantage of the ability of
+PINN \cite[PINN]{raissi2017physics} to generate new data consistent
 with the differential relationships.
 
-The second method make a Linearity assumption, to significantly
+The second method makes a linearity assumption, to significantly
 reduce the requirement of the amount of data.
-The augmentation of the Linearity assumption method, could be
-seen as a autoencoder who wants to find a parameterize agree
+The augmentation of the Linearity assumption method could be
+seen as a AutoEncoder who wants to find a parameterize agree
 some Linear differential equations.With this method, the machine
 refound the $sin$ and $cos$ function from the circle dataset.
 
-For the future work this model need to be test on more
+For future work this model needs to be tested on more
 complicated data set agree with more intricate differential relationships.
-The jacobian for high dimensional latent space with high order differential relationship
-would require geometric amount of computaional complexity $\sum_{j=0}^{N} D^{j}$ which may be augmentated or
-avoid by more advanced innovation in the future to have more efficiency.
+The Jacobian for high-dimensional latent space with high-order differential relationship
+would require geometric amount of computational complexity $\sum_{j=0}^{N} D^{j}$ which may be augmented or
+avoided by more advanced innovation in the future to have more efficiency.
 
 % \begin{thebibliography}{99}
 %     % Use \bibitem to reference your sources. Example:
